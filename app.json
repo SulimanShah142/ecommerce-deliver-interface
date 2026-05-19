@@ -1,0 +1,76 @@
+{
+  "expo": {
+    "name": "Brand Gallery Deliver",
+    "slug": "delivery-interface",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/app-icon.jpeg",
+    "scheme": "deliveryinterface",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/app-icon.jpeg",
+        "backgroundColor": "#FFFFFF"
+      },
+      "package": "com.shahsuliman.deliveryinterface"
+    },
+    "edgeToEdgeEnabled": true,
+    "predictiveBackGestureEnabled": false,
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysPermission": "Allow BrandGalley to access your location for delivery."
+        }
+      ],
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/app-icon.jpeg",
+          "resizeMode": "cover",
+          "backgroundColor": "#ffffff",
+          "dark": {
+            "image": "./assets/images/app-icon.jpeg",
+            "backgroundColor": "#000000"
+          }
+        }
+      ],
+      "expo-secure-store",
+      "expo-web-browser",
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "development"
+        }
+      ],
+      "@react-native-community/datetimepicker"
+    ],
+    "updates": {
+      "url": "https://u.expo.dev/db58dc3e-bb7b-4304-921f-cf2a65110f7c"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "oneSignalAppId": "32271ebd-e2b6-4562-b765-dd50eb88b966",
+      "eas": {
+        "projectId": "db58dc3e-bb7b-4304-921f-cf2a65110f7c"
+      }
+    },
+    "owner": "slliman"
+  }
+}
