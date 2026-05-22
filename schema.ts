@@ -114,10 +114,10 @@ export const appSettings = pgTable('app_settings', {
   newUserDiscountActive: boolean('new_user_discount_active').default(false),
   newUserDiscountType: text('new_user_discount_type'), // 'percentage' | 'fixed'
   newUserDiscountValue: numeric('new_user_discount_value'),
-  
+    deliveryFee: real("delivery_fee").default(150.0), // Base Shipping Fee in AFN
+  freeDeliveryThreshold: real("free_delivery_threshold").default(2000.0) ,// Threshold in AFN for Free Shipping
   // Delivery/Legacy logic from your restaurant SQL
   baseDeliveryFee: numeric('base_delivery_fee').default('3.00'),
-  freeDeliveryThreshold: numeric('free_delivery_threshold').default('500.00'),
   managerNumber: text('manager_number'),
 
   // Currency and Profit Settings

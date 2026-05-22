@@ -1,68 +1,77 @@
-import React, { useState, useRef, useMemo } from 'react';
-import { StyleSheet, View, ActivityIndicator, TouchableOpacity, Modal, SafeAreaView, Platform } from 'react-native';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
+import { View, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { Ionicons } from '@expo/vector-icons';
 
-interface UnifiedMapProps {
+type UnifiedMapProps = {
   role: 'USER' | 'DELIVER' | 'ADMIN';
-  userCoords?: [number, number] | null;
-  destinationCoords?: [number, number] | null;
-  warehouseCoords?: [number, number] | null;
-  onLocationSelect?: (coords: [number, number]) => void;
-  driverCoords?: [number, number] | null;
-}
-
-const DEFAULT_KABUL: [number, number] = [34.5553, 69.2075];
+  warehouseCoords: [number, number];
+  destinationCoords: [number, number];
+  driverCoords: [number, number] | null; 
+  orderStatus?: string;
+  orderId?: string;
+};
 
 export default function UnifiedMap({
   role,
-  userCoords,
-  destinationCoords,
   warehouseCoords,
+  destinationCoords,
   driverCoords,
-  onLocationSelect,
+  orderStatus = 'confirmed',
+  orderId
 }: UnifiedMapProps) {
-  const [loading, setLoading] = useState(true);
-  const [isFullMap, setIsFullMap] = useState(false);
   const webViewRef = useRef<WebView>(null);
+  const [loading, setLoading] = useState(true);
 
-  const runJS = (code: string) => {
-    webViewRef.current?.injectJavaScript(code);
-  };
+  // 1. EXTRACT EXPLICIT COORDINATES WITH STABLE DEFAULT FALLBACKS
+  const whLat = warehouseCoords[0];
+  const whLng = warehouseCoords[1];
+  const destLat = destinationCoords[0];
+  const destLng = destinationCoords[1];
 
-  // 1. FIX: Define handleMessage at the top level of the component
+  const drvLat = driverCoords ? driverCoords[0] : null;
+  const drvLng = driverCoords ? driverCoords[1] : null;
+  const hasDriver = drvLat !== null && drvLng !== null;
+
+  const hasWarehouse = !isNaN(whLat) && !isNaN(whLng);
+  const hasDest = !isNaN(destLat) && !isNaN(destLng);
+
+  const centerLat = hasDest ? destLat : (hasWarehouse ? whLat : 34.5330);
+  const centerLng = hasDest ? destLng : (hasWarehouse ? whLng : 69.1660);
+
+  // 2. LIVE REAL-TIME TELEMETRY PUSH EFFECT BLOCK
+  useEffect(() => {
+    if (webViewRef.current && hasDriver) {
+      const jsCode = `if (window.updateDriverPos) { window.updateDriverPos(${drvLat}, ${drvLng}); }`;
+      webViewRef.current.injectJavaScript(jsCode);
+    }
+  }, [drvLat, drvLng, hasDriver]);
+
   const handleMessage = (event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
-      if (onLocationSelect && data.lat && data.lng) {
-        onLocationSelect([data.lat, data.lng]);
-      }
+      console.log("🗺️ Map pin dropped coordinate data stream:", data);
     } catch (e) {
-      console.warn("Map message error:", e);
+      console.log("Message parse bypass", e);
     }
   };
 
-  const centerLat = destinationCoords?.[0] || userCoords?.[0] || DEFAULT_KABUL[0];
-  const centerLng = destinationCoords?.[1] || userCoords?.[1] || DEFAULT_KABUL[1];
-
-   const mapHtml = useMemo(() => {
-    // 1. Prepare safe strings for JS injection
-    const whLat = warehouseCoords?.[0] || 0;
-    const whLng = warehouseCoords?.[1] || 0;
-    const destLat = destinationCoords?.[0] || 0;
-    const destLng = destinationCoords?.[1] || 0;
-
-    const hasWarehouse = !!(warehouseCoords && warehouseCoords[0]);
-    const hasDest = !!(destinationCoords && destinationCoords[0]);
-
+  // 3. ENCLOSED LEAFLET STRUCTURAL HTML GENERATION ENGINE
+  const mapHtml = useMemo(() => {
     return `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=0.8, maximum-scale=1.0, user-scalable=no" />
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        
+        <!-- Fully qualified, explicit CDN paths for Leaflet -->
+       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+              integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+              crossorigin=""/>
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+                integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+                crossorigin=""></script>
+        
         <style>
           body { margin: 0; padding: 0; }
           #map { height: 100vh; width: 100vw; background: #e0e0e0; }
@@ -81,6 +90,7 @@ export default function UnifiedMap({
             maxZoom: 20
           }).addTo(map);
 
+          // 🎯 FIXED: Re-added explicit dimensions inside the internal divIcon wrapper setup
           function createEmojiIcon(emoji) {
             return L.divIcon({
               html: '<div class="icon-label">' + emoji + '</div>',
@@ -90,14 +100,14 @@ export default function UnifiedMap({
             });
           }
 
-          // 2. Warehouse Marker
+          // Warehouse Marker
           if (${hasWarehouse}) {
             L.marker([${whLat}, ${whLng}], {
               icon: createEmojiIcon('🏢')
             }).addTo(map).bindPopup("Store");
           }
 
-          // 3. Destination Marker
+          // Destination Marker
           var destMarker = null;
           if (${hasDest}) {
             destMarker = L.marker([${destLat}, ${destLng}], {
@@ -105,7 +115,32 @@ export default function UnifiedMap({
             }).addTo(map);
           }
 
-          // 4. Interaction (USER Role)
+          // 🛵 INITIAL DRIVER POSITION SETUP
+          var driverMarker = null;
+          var initialDrvLat = parseFloat('${drvLat || ''}');
+          var initialDrvLng = parseFloat('${drvLng || ''}');
+
+          if (${hasDriver} && !isNaN(initialDrvLat) && !isNaN(initialDrvLng)) {
+            driverMarker = L.marker([initialDrvLat, initialDrvLng], {
+              icon: createEmojiIcon('🛵')
+            }).addTo(map);
+          }
+
+          window.updateDriverPos = function(lat, lng) {
+            var nextLat = parseFloat(lat);
+            var nextLng = parseFloat(lng);
+            
+            if (!isNaN(nextLat) && !isNaN(nextLng)) {
+              var newPos = [nextLat, nextLng];
+              if (!driverMarker) {
+                driverMarker = L.marker(newPos, { icon: createEmojiIcon('🛵') }).addTo(map);
+              } else {
+                driverMarker.setLatLng(newPos);
+              }
+            }
+          };
+
+          // Interaction (USER Pin Dropping)
           if ('${role}' === 'USER') {
             map.on('click', function(e) {
               var lat = e.latlng.lat;
@@ -116,15 +151,22 @@ export default function UnifiedMap({
             });
           }
 
-          // 5. Routing Line Fix
-          if (${hasWarehouse} && ${hasDest}) {
-            // OSRM Format: lng,lat;lng,lat
+          // OSRM Routing Line Tracing Polyline
+          var rawWhLat = parseFloat('${whLat}');
+          var rawWhLng = parseFloat('${whLng}');
+          var rawDestLat = parseFloat('${destLat}');
+          var rawDestLng = parseFloat('${destLng}');
+
+          if (!isNaN(rawWhLat) && !isNaN(rawWhLng) && !isNaN(rawDestLat) && !isNaN(rawDestLng)) {
             var url = 'https://router.project-osrm.org/route/v1/driving/' + 
-                      '${whLng},${whLat};${destLng},${destLat}' + 
+                      rawWhLng + ',' + rawWhLat + ';' + rawDestLng + ',' + rawDestLat + 
                       '?overview=full&geometries=geojson';
 
             fetch(url)
-              .then(function(r) { return r.json(); })
+              .then(function(r) { 
+                if (!r.ok) throw new Error('OSRM Response Non-200');
+                return r.json(); 
+              })
               .then(function(data) {
                 if (data.routes && data.routes.length > 0) {
                   L.geoJSON(data.routes[0].geometry, {
@@ -132,9 +174,10 @@ export default function UnifiedMap({
                   }).addTo(map);
                   
                   var bounds = L.latLngBounds([
-                    [${whLat}, ${whLng}],
-                    [${destLat}, ${destLng}]
+                    [rawWhLat, rawWhLng],
+                    [rawDestLat, rawDestLng]
                   ]);
+                  // 🎯 FIXED: Restored layout bounding padding coordinates cleanly
                   map.fitBounds(bounds, { padding: [40, 40] });
                 }
               })
@@ -146,72 +189,31 @@ export default function UnifiedMap({
       </body>
       </html>
     `;
-  }, [role, warehouseCoords, destinationCoords, centerLat, centerLng]);
+  }, [role, whLat, whLng, destLat, destLng, drvLat, drvLng, hasDriver, hasWarehouse, hasDest, centerLat, centerLng]);
 
-  const MapContent = () => (
-    <View style={{ flex: 1 }}>
+  return (
+    <View style={styles.container}>
       <WebView
         ref={webViewRef}
         originWhitelist={['*']}
         source={{ html: mapHtml }}
         onLoadEnd={() => setLoading(false)}
-        onMessage={handleMessage} // Works now!
+        onMessage={handleMessage} 
         javaScriptEnabled={true}
         domStorageEnabled={true}
         style={styles.map}
       />
-
-      <View style={styles.zoomControls}>
-        <TouchableOpacity style={styles.zoomBtn} onPress={() => runJS("map.zoomIn();")}>
-          <Ionicons name="add" size={24} color="#0A1128" />
-        </TouchableOpacity>
-        <View style={styles.zoomDivider} />
-        <TouchableOpacity style={styles.zoomBtn} onPress={() => runJS("map.zoomOut();")}>
-          <Ionicons name="remove" size={24} color="#0A1128" />
-        </TouchableOpacity>
-      </View>
-
-      <TouchableOpacity style={styles.expandBtn} onPress={() => setIsFullMap(!isFullMap)}>
-        <Ionicons name={isFullMap ? "contract" : "expand"} size={20} color="#000" />
-      </TouchableOpacity>
-      
       {loading && (
-        <View style={styles.loader}>
-          <ActivityIndicator size="large" color="#0A1128" />
+        <View style={styles.loaderCover}>
+          <ActivityIndicator size="small" color="#000000" />
         </View>
-      )}
-    </View>
-  );
-
-  return (
-    <View style={isFullMap ? styles.fullscreenWrapper : styles.outerWrapper}>
-      {!isFullMap ? (
-        <MapContent />
-      ) : (
-        <Modal visible={isFullMap} animationType="slide">
-          <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={() => setIsFullMap(false)} style={styles.closeBtn}>
-                <Ionicons name="close" size={24} color="#fff" />
-              </TouchableOpacity>
-            </View>
-            <MapContent />
-          </SafeAreaView>
-        </Modal>
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  outerWrapper: { height: 220, borderRadius: 15, overflow: 'hidden', backgroundColor: '#eee', borderWidth: 1, borderColor: '#ddd' },
-  fullscreenWrapper: { flex: 1 },
+  container: { flex: 1, backgroundColor: '#E0E0E0', position: 'relative' },
   map: { flex: 1 },
-  expandBtn: { position: 'absolute', bottom: 15, right: 15, backgroundColor: '#fff', padding: 10, borderRadius: 10, elevation: 5, zIndex: 10 },
-  zoomControls: { position: 'absolute', left: 15, top: '35%', backgroundColor: '#fff', borderRadius: 8, elevation: 5, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 3, borderWidth: 1, borderColor: '#eee', zIndex: 10 },
-  zoomBtn: { padding: 10, alignItems: 'center', justifyContent: 'center' },
-  zoomDivider: { height: 1, backgroundColor: '#eee', marginHorizontal: 5 },
-  modalHeader: { position: 'absolute', top: Platform.OS === 'ios' ? 50 : 20, right: 20, zIndex: 100 },
-  closeBtn: { backgroundColor: 'rgba(0,0,0,0.6)', padding: 10, borderRadius: 25 },
-  loader: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff', zIndex: 200 }
+  loaderCover: { ...StyleSheet.absoluteFillObject, backgroundColor: '#F8F9FA', justifyContent: 'center', alignItems: 'center' }
 });
