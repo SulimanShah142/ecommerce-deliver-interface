@@ -24,7 +24,7 @@ export default function RootLayout() {
   // 1. ONE-TIME INITIALIZATION PIPELINE
   useEffect(() => {
     // Replace with your actual OneSignal App ID string
-    OneSignal.initialize("YOUR_ONESIGNAL_APP_ID"); 
+    OneSignal.initialize("32271ebd-e2b6-4562-b765-dd50eb88b966"); 
   }, []);
 
   // 2. Core Authorization Lookup Mount Bootstrap Session Handshake

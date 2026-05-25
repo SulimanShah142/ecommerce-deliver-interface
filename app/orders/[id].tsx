@@ -1,142 +1,193 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, Image, ActivityIndicator, TouchableOpacity, Alert, Linking, Platform } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import UnifiedMap from '@/components/UnifiedMap';
-import * as Location from 'expo-location'; // 🎯 CRITICAL FIX: Added missing import
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  Linking,
+} from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const BASE_URL = "http://192.168.1.3:8787"; 
-const API_KEY = "pk.ac03476010699238dcadcb4f0eb9a998";
+import UnifiedMap from "@/components/UnifiedMap";
+import * as Location from "expo-location";
+
+const BASE_URL = "https://workers.dev";
+const LOCATION_IQ_TOKEN = "pk.68df6d63d6b1d167fde9b6b77d6118d3";
 
 export default function DelivererOrderDetail() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  
+  const insets = useSafeAreaInsets();
+
   const [order, setOrder] = useState<any>(null);
   const [settings, setSettings] = useState<any>(null);
-  const [loading, setLoading] = useState(true); // Default to loading state
+  const [loading, setLoading] = useState(true);
   const [addressName, setAddressName] = useState("Resolving address...");
   const [myGPS, setMyGPS] = useState<[number, number] | null>(null);
-  // 1. RE-READ AND PARALLEL DATA FETCH ENGINE
+
+  const isRTL = false;
+  const locale = "en";
+
   const fetchData = useCallback(async () => {
     if (!id) return;
+
     try {
       const [orderRes, settingsRes] = await Promise.all([
         fetch(`${BASE_URL}/api/orders/${id}`),
-        fetch(`${BASE_URL}/api/admin/settings`)
+        fetch(`${BASE_URL}/api/admin/settings`),
       ]);
-      
-      if (!orderRes.ok || !settingsRes.ok) throw new Error("Server metrics error");
+
+      if (!orderRes.ok || !settingsRes.ok) {
+        throw new Error("Server metrics error");
+      }
 
       const orderData = await orderRes.json();
       const settingsData = await settingsRes.json();
 
       setOrder(orderData);
       setSettings(settingsData);
-      
+
       if (orderData?.latitude && orderData?.longitude) {
         getAddressFromCoords(orderData.latitude, orderData.longitude);
       }
     } catch (err) {
       console.error("Fetch Error:", err);
-      Alert.alert("Error", "Could not synchronize order records from cloud server.");
+      Alert.alert(
+        "Error",
+        "Could not synchronize order records from cloud server.",
+      );
     } finally {
       setLoading(false);
     }
   }, [id]);
 
-  // 2. FIXED ANTI-FLICKER ROUTINE: Forces loading reset whenever ID changes
   useEffect(() => {
     setLoading(true);
-    setOrder(null); // Clear out previous cache instantly to stop layout bleed
-    setMyGPS(null); // Reset location tracking cache explicitly
+    setOrder(null);
+    setMyGPS(null);
     setAddressName("Resolving address...");
+
     fetchData();
   }, [id, fetchData]);
 
-  // 3. FIXED REVERSE GEOCODING API URL
   const getAddressFromCoords = async (lat: string, lon: string) => {
     try {
-      const res = await fetch(`https://locationiq.com{API_KEY}&lat=${lat}&lon=${lon}&format=json`);
-      if (!res.ok) throw new Error();
+      const res = await fetch(
+        `https://us1.locationiq.com/v1/reverse.php?key=${LOCATION_IQ_TOKEN}&lat=${lat}&lon=${lon}&format=json`,
+      );
+
+      if (!res.ok) {
+        throw new Error("Reverse geocoding failed");
+      }
+
       const data = await res.json();
-      setAddressName(data.display_name || "Street Address Not Found");
+
+      setAddressName(data?.display_name || "Street Address Not Found");
     } catch (e) {
+      console.log("Reverse geocoding error:", e);
       setAddressName("Address unavailable offline");
     }
   };
-  // 4. SECURE GPS HEARTBEAT POLLING & CRASH-PROOF SEEDING
+
   useEffect(() => {
     let gpsInterval: NodeJS.Timeout;
 
     const startGpsPush = async () => {
       try {
-        let { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert("Permission Blocked", "GPS tracking must be active to navigate fleet runs.");
+        const { status } = await Location.requestForegroundPermissionsAsync();
+
+        if (status !== "granted") {
+          Alert.alert(
+            "Permission Blocked",
+            "GPS tracking must be active to navigate fleet runs.",
+          );
           return;
         }
 
-        // 🎯 THE RESILIENCE FIX: Wrap hardware reading inside a try/catch box with safe default coordinates
-        let initialCoords: [number, number] = [34.5330, 69.1660]; // Central Warehouse Default Fallback
+        let initialCoords: [number, number] = [34.533, 69.166];
 
         try {
-          // Check if location services are enabled on the phone before querying hardware
           const providerStatus = await Location.getProviderStatusAsync();
-          
+
           if (providerStatus.locationServicesEnabled) {
-            // First attempt: Grab fast-cached location registry data
             const lastKnown = await Location.getLastKnownPositionAsync({});
+
             if (lastKnown) {
-              initialCoords = [lastKnown.coords.latitude, lastKnown.coords.longitude];
+              initialCoords = [
+                lastKnown.coords.latitude,
+                lastKnown.coords.longitude,
+              ];
             } else {
-              // Second attempt: Request a fresh, balanced lock from hardware sensors
-              const initLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-              initialCoords = [initLoc.coords.latitude, initLoc.coords.longitude];
+              const initLoc = await Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.Balanced,
+              });
+
+              initialCoords = [
+                initLoc.coords.latitude,
+                initLoc.coords.longitude,
+              ];
             }
-          } else {
-            console.log("⚠️ Hardware GPS Toggle is OFF. Seeding warehouse fallbacks.");
           }
         } catch (locationHardwareError) {
-          console.log("⚠️ Location hardware unreachable. Defaulting to warehouse pin anchors.");
-          
-          // Try to look up custom warehouse points from settings if available
+          console.log(
+            "Location provider fallback triggered:",
+            locationHardwareError,
+          );
+
           if (settings?.warehouseLat && settings?.warehouseLng) {
-            initialCoords = [parseFloat(settings.warehouseLat), parseFloat(settings.warehouseLng)];
+            initialCoords = [
+              parseFloat(settings.warehouseLat),
+              parseFloat(settings.warehouseLng),
+            ];
           }
         }
 
-        // Seed the map instantly so it doesn't crash or stay empty
         setMyGPS(initialCoords);
 
-        // Setup the background interval tracking handle safely
-        if (order?.status === 'picked_up') {
+        if (order?.status === "picked_up") {
           gpsInterval = setInterval(async () => {
             try {
               const providerCheck = await Location.getProviderStatusAsync();
-              if (!providerCheck.locationServicesEnabled) return; // Skip loop silently if toggle is off
 
-              const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-              const currentCoords: [number, number] = [loc.coords.latitude, loc.coords.longitude];
-              
+              if (!providerCheck.locationServicesEnabled) {
+                return;
+              }
+
+              const loc = await Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.Balanced,
+              });
+
+              const currentCoords: [number, number] = [
+                loc.coords.latitude,
+                loc.coords.longitude,
+              ];
+
               setMyGPS(currentCoords);
 
-              // Sends individual explicit coordinate entries to prevent database column corruption
               await fetch(`${BASE_URL}/api/orders/${id}/update-gps`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                  lat: currentCoords[0].toString(), 
-                  lng: currentCoords[1].toString()  
-                })
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  lat: currentCoords[0].toString(),
+                  lng: currentCoords[1].toString(),
+                }),
               });
-              console.log(`🛰️ Dispatching location heartbeat update for Order: ${id}`);
+
+              console.log(
+                `🛰️ Dispatching location heartbeat update for Order: ${id}`,
+              );
             } catch (e) {
               console.log("GPS Broadcast skip iteration pass...", e);
             }
           }, 12000);
         }
-
       } catch (err) {
         console.error("Critical GPS framework processing error:", err);
       }
@@ -147,199 +198,563 @@ export default function DelivererOrderDetail() {
     }
 
     return () => {
-      if (gpsInterval) clearInterval(gpsInterval);
+      if (gpsInterval) {
+        clearInterval(gpsInterval);
+      }
     };
   }, [order?.status, id, settings]);
- // Listens closely to status shifts to mount interval loop on the fly
 
   const updateStatus = async (newStatus: string) => {
     try {
       setLoading(true);
+
       const res = await fetch(`${BASE_URL}/api/orders/${id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus })
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          status: newStatus,
+        }),
       });
 
       if (res.ok) {
         await fetchData();
-        Alert.alert("Success", `Status updated to: ${newStatus.replace('_', ' ').toUpperCase()}`);
+
+        Alert.alert(
+          "Success",
+          `Status updated to: ${newStatus.replace("_", " ").toUpperCase()}`,
+        );
+      } else {
+        throw new Error("Status update failed");
       }
-    } catch (e) { 
-        Alert.alert("Error", "Update failed."); 
+    } catch (e) {
+      console.log("Update status error:", e);
+
+      Alert.alert("Error", "Update failed.");
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
-  // Safe Loading Component Guard View
+  const toLocalNumbers = (num: string | number) => {
+    const str = Math.round(Number(num || 0)).toLocaleString();
+
+    if (locale === "en") {
+      return str;
+    }
+
+    const easternDigits = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
+
+    return str.replace(/[0-9]/g, (w) => {
+      return easternDigits[parseInt(w)];
+    });
+  };
+
   if (loading || !order) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#000000" />
+
         <Text style={styles.loaderText}>LOADING DESIRED MANIFEST ROUTE...</Text>
       </View>
     );
   }
 
   const warehouseLocation: [number, number] = [
-    parseFloat(settings?.warehouseLat || settings?.warehouse_lat) || 34.5330,
-    parseFloat(settings?.warehouseLng || settings?.warehouse_lng) || 69.1660
+    parseFloat(settings?.warehouseLat || settings?.warehouse_lat) || 34.533,
+    parseFloat(settings?.warehouseLng || settings?.warehouse_lng) || 69.166,
   ];
 
   const destinationCoords: [number, number] = [
-    parseFloat(order.latitude) || 34.5553, 
-    parseFloat(order.longitude) || 69.2075
+    parseFloat(order.latitude) || 34.5553,
+    parseFloat(order.longitude) || 69.2075,
   ];
+
+  const baseSubtotal = parseFloat(
+    order?.subtotal || order?.subtotalAmount || "0",
+  );
+
+  const rawShippingValue =
+    order?.shipping || order?.shippingAmount || order?.shippingFee;
+
+  const parsedShippingFreight = parseFloat(rawShippingValue?.toString() || "0");
+
+  const markdownDiscount = parseFloat(
+    order?.discount || order?.discountAmount || "0",
+  );
+
+  const totalInvoiceCollectBalance = parseFloat(
+    order?.totalAmount || order?.total_amount || "0",
+  );
 
   return (
     <View style={styles.container}>
       <View style={styles.mapWrapper}>
-        <UnifiedMap 
-          role="ADMIN" 
+        <UnifiedMap
+          role="DELIVER"
           warehouseCoords={warehouseLocation}
           destinationCoords={destinationCoords}
-          driverCoords={myGPS} 
+          driverCoords={myGPS}
         />
 
-        <TouchableOpacity onPress={() => router.back()} style={styles.backFloat}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={[styles.backFloat, { top: insets.top + 10 }]}
+        >
           <Ionicons name="chevron-back" size={24} color="#000" />
         </TouchableOpacity>
       </View>
-      
-      <ScrollView style={styles.detailsSheet} showsVerticalScrollIndicator={false}>
+
+      <ScrollView
+        style={styles.detailsSheet}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.mainInfo}>
-          <View style={styles.headerRow}>
-            <View style={{ flex: 1 }}>
+          <View
+            style={[
+              styles.headerRow,
+              isRTL && {
+                flexDirection: "row-reverse",
+              },
+            ]}
+          >
+            <View
+              style={{
+                flex: 1,
+                alignItems: isRTL ? "flex-end" : "flex-start",
+              }}
+            >
               <Text style={styles.sectionTitle}>RECIPIENT CUSTOMER</Text>
-              <Text style={styles.customerName}>{order.customerName?.toUpperCase()}</Text>
+
+              <Text style={styles.customerName}>
+                {order.customerName?.toUpperCase()}
+              </Text>
             </View>
+
             <View style={styles.statusTag}>
-              <Text style={styles.statusTagText}>{order.status?.toUpperCase()}</Text>
+              <Text style={styles.statusTagText}>
+                {order.status?.replace("_", " ")?.toUpperCase()}
+              </Text>
             </View>
           </View>
 
           <View style={styles.contactCard}>
-            <TouchableOpacity 
-              style={styles.contactAction} 
+            <TouchableOpacity
+              style={[
+                styles.contactAction,
+                isRTL && {
+                  flexDirection: "row-reverse",
+                },
+              ]}
               onPress={() => Linking.openURL(`tel:${order.phoneNumber}`)}
             >
-              <Ionicons name="call" size={18} color="#000" />
+              <Ionicons
+                name="call"
+                size={18}
+                color="#000"
+                style={isRTL ? { marginLeft: 8 } : { marginRight: 8 }}
+              />
+
               <Text style={styles.contactValue}>{order.phoneNumber}</Text>
             </TouchableOpacity>
-            
+
             <View style={styles.addressBox}>
-              <View style={styles.addressHeader}>
-                <Ionicons name="location-sharp" size={16} color="#000" />
-                <Text style={styles.addressLabel} numberOfLines={1}>{addressName.toUpperCase()}</Text>
+              <View
+                style={[
+                  styles.addressHeader,
+                  isRTL && {
+                    flexDirection: "row-reverse",
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="location-sharp"
+                  size={16}
+                  color="#000000"
+                  style={isRTL ? { marginLeft: 6 } : { marginRight: 6 }}
+                />
+
+                <Text style={styles.addressTitleText}>DELIVERY ADDRESS</Text>
               </View>
-              <Text style={styles.addressText}>{order.address?.toUpperCase()}</Text>
+
+              <Text
+                style={[
+                  styles.addressBodyParagraph,
+                  isRTL && {
+                    textAlign: "right",
+                  },
+                ]}
+              >
+                {addressName}
+              </Text>
             </View>
           </View>
-        </View>
 
-        {/* ITEMS SECTION */}
-        <View style={styles.itemSection}>
-          <Text style={styles.sectionTitle}>CARGO ITEMS ({order.items?.length || 0})</Text>
-          {order.items?.map((item: any, index: number) => (
-            <View key={`item-${item.id || index}`} style={styles.itemRow}>
-              <Image source={{ uri: item.imageUrl || item.productImage }} style={styles.itemThumb} />
-              <View style={styles.itemTextContainer}>
-                <Text style={styles.itemName}>{item.name?.toUpperCase() || item.productName?.toUpperCase()}</Text>
-                <Text style={styles.itemMeta}>QTY: {item.quantity} | {item.selectedSize || 'N/A'}</Text>
-              </View>
-              <Text style={styles.itemPrice}>AFN {(Number(item.price) || 0).toLocaleString()}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* FINANCIAL SUMMARY CARD */}
-        <View style={styles.financialSection}>
-          <Text style={styles.sectionTitle}>COLLECTION STATEMENT</Text>
-          <View style={styles.billingRow}>
-            <Text style={styles.billLabel}>Cargo Subtotal</Text>
-            <Text style={styles.billValue}>AFN {(Math.max(0, (Number(order.totalAmount) || 0) - (Number(order.shippingFee) || 0))).toLocaleString()}</Text>
-          </View>
-          <View style={styles.billingRow}>
-            <Text style={styles.billLabel}>Logistics Surcharge (Shipping)</Text>
-            <Text style={[styles.billValue, Number(order.shippingFee) === 0 && { color: '#22C55E', fontWeight: '900' }]}>
-              {Number(order.shippingFee) === 0 ? "FREE" : `AFN ${Number(order.shippingFee).toLocaleString()}`}
+          <View style={styles.financialManifestCard}>
+            <Text
+              style={[
+                styles.manifestSectionTitle,
+                isRTL && {
+                  textAlign: "right",
+                },
+              ]}
+            >
+              FINANCIAL RECAP STATEMENT
             </Text>
-          </View>
-          <View style={styles.totalRowSplit}>
-            <Text style={styles.grandLabel}>CASH TO COLLECT ON DELIVERY</Text>
-            <Text style={styles.grandValue}>AFN {Math.round(Number(order.totalAmount) || 0).toLocaleString()}</Text>
-          </View>
-        </View>
 
-        {/* SYSTEM FLOW BUTTON TRIGGERS */}
-        <View style={styles.actionContainer}>
-           {order.status === 'confirmed' && (
-             <TouchableOpacity style={styles.systemBtn} onPress={() => updateStatus('picked_up')}>
-                <Text style={styles.systemBtnText}>PICK UP FROM WAREHOUSE</Text>
-             </TouchableOpacity>
-           )}
-           {order.status === 'picked_up' && (
-             <TouchableOpacity style={[styles.systemBtn, { backgroundColor: '#000000' }]} onPress={() => updateStatus('delivered')}>
-                <Ionicons name="checkmark-circle" size={18} color="#FFF" style={{ marginRight: 8 }} />
-                <Text style={styles.systemBtnText}>CONFIRM DELIVERY</Text>
-             </TouchableOpacity>
-           )}
-           {order.status === 'delivered' && (
-              <View style={styles.successState}>
-                <Ionicons name="shield-checkmark" size={22} color="#000000" />
-                <Text style={styles.successText}>TASK COMPLETED SUCCESSFULLY</Text>
+            <View
+              style={[
+                styles.invoiceRowLine,
+                isRTL && {
+                  flexDirection: "row-reverse",
+                },
+              ]}
+            >
+              <Text style={styles.invoiceLabel}>Items Subtotal</Text>
+
+              <Text style={styles.invoiceValue}>
+                AFN {toLocalNumbers(baseSubtotal)}
+              </Text>
+            </View>
+
+            {markdownDiscount > 0 && (
+              <View
+                style={[
+                  styles.invoiceRowLine,
+                  isRTL && {
+                    flexDirection: "row-reverse",
+                  },
+                ]}
+              >
+                <Text style={[styles.invoiceLabel, { color: "#FF3B30" }]}>
+                  Promotional Discount
+                </Text>
+
+                <Text style={[styles.invoiceValue, { color: "#FF3B30" }]}>
+                  - AFN {toLocalNumbers(markdownDiscount)}
+                </Text>
               </View>
-           )}
+            )}
+
+            <View
+              style={[
+                styles.invoiceRowLine,
+                isRTL && {
+                  flexDirection: "row-reverse",
+                },
+              ]}
+            >
+              <Text style={styles.invoiceLabel}>
+                Logistics Shipping Freight
+              </Text>
+
+              <Text
+                style={[
+                  styles.invoiceValue,
+                  parsedShippingFreight === 0 && {
+                    color: "#22C55E",
+                    fontWeight: "900",
+                  },
+                ]}
+              >
+                {parsedShippingFreight === 0
+                  ? "FREE SHIPPING"
+                  : `AFN ${toLocalNumbers(parsedShippingFreight)}`}
+              </Text>
+            </View>
+
+            <View style={styles.dividerHairlineLine} />
+
+            <View
+              style={[
+                styles.invoiceRowLine,
+                isRTL && {
+                  flexDirection: "row-reverse",
+                },
+                { marginBottom: 0 },
+              ]}
+            >
+              <Text style={styles.grandTotalLabel}>
+                TOTAL PAYABLE CASH COLLECT
+              </Text>
+
+              <Text style={styles.grandTotalValue}>
+                AFN {toLocalNumbers(totalInvoiceCollectBalance)}
+              </Text>
+            </View>
+          </View>
+
+          {order.status === "confirmed" && (
+            <TouchableOpacity
+              style={styles.primaryActionBtn}
+              onPress={() => updateStatus("picked_up")}
+            >
+              <Ionicons
+                name="cube-sharp"
+                size={18}
+                color="#FFFFFF"
+                style={{ marginRight: 8 }}
+              />
+
+              <Text style={styles.primaryActionBtnText}>
+                PICK UP CARGO FROM WAREHOUSE
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {order.status === "picked_up" && (
+            <TouchableOpacity
+              style={[
+                styles.primaryActionBtn,
+                {
+                  backgroundColor: "#22C55E",
+                },
+              ]}
+              onPress={() => updateStatus("delivered")}
+            >
+              <Ionicons
+                name="checkmark-circle-sharp"
+                size={18}
+                color="#FFFFFF"
+                style={{ marginRight: 8 }}
+              />
+
+              <Text style={styles.primaryActionBtnText}>
+                CONFIRM SECURE DELIVERY
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
-        <View style={{ height: 60 }} />
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' },
-  loaderText: { fontSize: 9, fontWeight: '800', color: '#999', letterSpacing: 1.5, marginTop: 12 },
-  mapWrapper: { height: 320, width: '100%', position: 'relative' },
-  backFloat: { position: 'absolute', top: Platform.OS === 'ios' ? 55 : 40, left: 16, backgroundColor: '#FFF', padding: 8, borderRadius: 0, zIndex: 99, elevation: 4 },
-  
-  detailsSheet: { flex: 1, backgroundColor: '#FFF', marginTop: -10 },
-  mainInfo: { padding: 20 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
-  sectionTitle: { fontSize: 9, fontWeight: '900', color: '#BBBBBB', letterSpacing: 1.5, marginBottom: 12 },
-  customerName: { fontSize: 20, fontWeight: '900', color: '#000', letterSpacing: -0.5 },
-  statusTag: { borderWidth: 1, paddingHorizontal: 12, paddingVertical: 6, borderColor: '#000000' },
-  statusTagText: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
-  
-  contactCard: { marginTop: 20, gap: 15 },
-  contactAction: { flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#F5F5F5', paddingBottom: 12 },
-  contactValue: { fontSize: 14, fontWeight: '700', color: '#000' },
-  addressBox: { gap: 6, marginTop: 5 },
-  addressHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  addressLabel: { fontSize: 9, fontWeight: '800', color: '#666', flex: 1 },
-  addressText: { fontSize: 13, color: '#333', lineHeight: 18, fontWeight: '600' },
-  
-  itemSection: { padding: 20, borderTopWidth: 1, borderTopColor: '#F5F5F5' },
-  itemRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, borderBottomWidth: 1, borderBottomColor: '#FAFAFA', paddingBottom: 12 },
-  itemThumb: { width: 50, height: 65, backgroundColor: '#FAFAFA' },
-  itemTextContainer: { flex: 1, marginLeft: 15 },
-  itemName: { fontSize: 12, fontWeight: '800', color: '#000' },
-  itemMeta: { fontSize: 10, color: '#999', marginTop: 4, fontWeight: '600' },
-  itemPrice: { fontSize: 13, fontWeight: '900', color: '#000' },
+  container: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+  },
 
-  financialSection: { padding: 20, borderTopWidth: 1, borderTopColor: '#F5F5F5', backgroundColor: '#FAFAFA' },
-  billingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  billLabel: { fontSize: 12, color: '#666', fontWeight: '500' },
-  billValue: { fontSize: 12, color: '#000', fontWeight: '700' },
-  totalRowSplit: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#EFEFEF', paddingTop: 12 },
-  grandLabel: { fontSize: 9, fontWeight: '900', color: '#888888', letterSpacing: 1, marginBottom: 4 },
-  grandValue: { fontSize: 22, fontWeight: '900', color: '#000000', letterSpacing: -0.5 },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 24,
+  },
 
-  actionContainer: { padding: 20 },
-  systemBtn: { backgroundColor: '#000000', paddingVertical: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', borderRadius: 2 },
-  systemBtnText: { color: '#FFF', fontSize: 11, fontWeight: '900', letterSpacing: 1.5 },
-  successState: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12 },
-  successText: { fontSize: 11, fontWeight: '900', letterSpacing: 1.5, color: '#000000' }
+  loaderText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#666666",
+    letterSpacing: 1.5,
+    marginTop: 12,
+    textAlign: "center",
+  },
+
+  mapWrapper: {
+    width: "100%",
+    height: 380,
+    position: "relative",
+    backgroundColor: "#F5F5F5",
+  },
+
+  backFloat: {
+    position: "absolute",
+    left: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.96)",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+  },
+
+  detailsSheet: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    marginTop: -24,
+  },
+
+  mainInfo: {
+    padding: 22,
+    paddingBottom: 40,
+  },
+
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 24,
+  },
+
+  sectionTitle: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#8A8A8A",
+    letterSpacing: 1.4,
+    marginBottom: 6,
+  },
+
+  customerName: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#000000",
+    letterSpacing: -0.4,
+  },
+
+  statusTag: {
+    backgroundColor: "#000000",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+
+  statusTagText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+
+  contactCard: {
+    borderWidth: 1,
+    borderColor: "#EFEFEF",
+    padding: 18,
+    borderRadius: 18,
+    backgroundColor: "#FAFAFA",
+    marginBottom: 24,
+  },
+
+  contactAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ECECEC",
+    marginBottom: 14,
+  },
+
+  contactValue: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#000000",
+  },
+
+  addressBox: {
+    width: "100%",
+  },
+
+  addressHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+
+  addressTitleText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#555555",
+    letterSpacing: 0.8,
+  },
+
+  addressBodyParagraph: {
+    fontSize: 13,
+    color: "#333333",
+    lineHeight: 20,
+    fontWeight: "500",
+  },
+
+  financialManifestCard: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#EFEFEF",
+    padding: 18,
+    borderRadius: 18,
+    marginBottom: 24,
+  },
+
+  manifestSectionTitle: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#000000",
+    letterSpacing: 1,
+    marginBottom: 16,
+  },
+
+  invoiceRowLine: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+
+  invoiceLabel: {
+    fontSize: 13,
+    color: "#666666",
+    fontWeight: "600",
+  },
+
+  invoiceValue: {
+    fontSize: 13,
+    color: "#000000",
+    fontWeight: "800",
+  },
+
+  dividerHairlineLine: {
+    height: 1,
+    backgroundColor: "#EFEFEF",
+    marginVertical: 12,
+  },
+
+  grandTotalLabel: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#000000",
+    letterSpacing: 0.5,
+  },
+
+  grandTotalValue: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#000000",
+  },
+
+  primaryActionBtn: {
+    backgroundColor: "#000000",
+    paddingVertical: 18,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 16,
+    marginTop: 10,
+    width: "100%",
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+  },
+
+  primaryActionBtnText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
 });

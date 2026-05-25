@@ -1,5 +1,6 @@
+import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useRef, useEffect, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator, Platform } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Platform, TouchableOpacity } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 type UnifiedMapProps = {
@@ -191,8 +192,11 @@ export default function UnifiedMap({
     `;
   }, [role, whLat, whLng, destLat, destLng, drvLat, drvLng, hasDriver, hasWarehouse, hasDest, centerLat, centerLng]);
 
+  // ... (Your existing mapHtml useMemo compilation logic remains 100% untouched above)
+
   return (
     <View style={styles.container}>
+      {/* NATIVE INTERFACE WEB VIEW BROWSING BRIDGE */}
       <WebView
         ref={webViewRef}
         originWhitelist={['*']}
@@ -203,6 +207,61 @@ export default function UnifiedMap({
         domStorageEnabled={true}
         style={styles.map}
       />
+
+      {/* 🎯 FLOATING HOOD MAP UTILITY SYSTEM CONTROLS BUTTONS TRAY */}
+      {!loading && (
+        <View style={styles.floatingControlsGroup}>
+          {/* Zoom In Button Control Anchor */}
+          <TouchableOpacity 
+            style={styles.controlPillBtn} 
+            activeOpacity={0.7}
+            onPress={() => webViewRef.current?.injectJavaScript('map.zoomIn();')}
+          >
+            <Ionicons name="add-sharp" size={20} color="#000000" />
+          </TouchableOpacity>
+          
+          <View style={styles.pillHairlineDivider} />
+
+          {/* Zoom Out Button Control Anchor */}
+          <TouchableOpacity 
+            style={styles.controlPillBtn} 
+            activeOpacity={0.7}
+            onPress={() => webViewRef.current?.injectJavaScript('map.zoomOut();')}
+          >
+            <Ionicons name="remove-sharp" size={20} color="#000000" />
+          </TouchableOpacity>
+
+          <View style={styles.pillHairlineDivider} />
+
+          {/* 🎯 FULL VIEW AUTO-MAXIMIZE ACCORDION CAMERA TOGGLE LINK */}
+          {/* Automatically repositions web view camera boundaries around your hardware pins metrics */}
+          <TouchableOpacity 
+            style={styles.controlPillBtn} 
+            activeOpacity={0.7}
+            onPress={() => {
+              const boundsJsMacro = `
+                if (typeof map !== 'undefined') {
+                  var activeMarkersGroup = [];
+                  map.eachLayer(function(layer) {
+                    if (layer instanceof L.Marker) {
+                      activeMarkersGroup.push(layer.getLatLng());
+                    }
+                  });
+                  if (activeMarkersGroup.length > 0) {
+                    var mapBoundsLimits = L.latLngBounds(activeMarkersGroup);
+                    map.fitBounds(mapBoundsLimits, { padding: [50, 50] });
+                  }
+                }
+              `;
+              webViewRef.current?.injectJavaScript(boundsJsMacro);
+            }}
+          >
+            <Ionicons name="expand-sharp" size={16} color="#000000" />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* COMPACT LOADER ACCENT PANEL SPLASH GATES */}
       {loading && (
         <View style={styles.loaderCover}>
           <ActivityIndicator size="small" color="#000000" />
@@ -212,8 +271,51 @@ export default function UnifiedMap({
   );
 }
 
+// 🎯 INDUSTRIAL STUDIO VIEW STYLESHEET WITH OVERLAY MARKERS CODES
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#E0E0E0', position: 'relative' },
-  map: { flex: 1 },
-  loaderCover: { ...StyleSheet.absoluteFillObject, backgroundColor: '#F8F9FA', justifyContent: 'center', alignItems: 'center' }
+  container: { 
+    flex: 1, 
+    backgroundColor: '#E0E0E0', 
+    position: 'relative' 
+  },
+  map: { 
+    flex: 1 
+  },
+  loaderCover: { 
+    ...StyleSheet.absoluteFillObject, 
+    backgroundColor: '#F8F9FA', 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    zIndex: 99 
+  },
+
+  // 🎯 FLOATING HOOD CONTAINER MATRIX LAYOUT RULES
+  floatingControlsGroup: {
+    position: 'absolute',
+    bottom: 24,
+    right: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
+    borderRadius: 2,
+    // Native shadow boundaries elevation structures layers encryption profiles
+    elevation: 4,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    zIndex: 1000
+  },
+  controlPillBtn: {
+    width: 38,
+    height: 38,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF'
+  },
+  pillHairlineDivider: {
+    height: 1,
+    backgroundColor: '#EEEEEE',
+    width: '100%'
+  }
 });

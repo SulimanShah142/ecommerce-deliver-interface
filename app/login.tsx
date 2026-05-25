@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { OneSignal } from 'react-native-onesignal';
 
-const API_URL = "http://192.168.1.3:8787";
+const API_URL = "https://brand-gallery-backend.brand-gallery.workers.dev";
 
 export default function DelivererLogin() {
   const [email, setEmail] = useState('');
