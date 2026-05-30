@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -8,16 +8,19 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Platform,
+  Image
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import UnifiedMap from "@/components/UnifiedMap";
 import * as Location from "expo-location";
+import LocationPermissionModal from "@/components/LoxationPermissionModal";
 
-const BASE_URL = "https://workers.dev";
-const LOCATION_IQ_TOKEN = "pk.68df6d63d6b1d167fde9b6b77d6118d3";
+// 🎯 HIGH-SPEED PRODUCTION BINDINGS
+const BASE_URL = "http://192.168.1.3:8787";
+const LOCATION_IQ_TOKEN = "pk.ac03476010699238dcadcb4f0eb9a998";
 
 export default function DelivererOrderDetail() {
   const { id } = useLocalSearchParams();
@@ -29,13 +32,37 @@ export default function DelivererOrderDetail() {
   const [loading, setLoading] = useState(true);
   const [addressName, setAddressName] = useState("Resolving address...");
   const [myGPS, setMyGPS] = useState<[number, number] | null>(null);
+const [showLocationPermissionModal, setShowLocationPermissionModal] =
+  useState(false);
+const [gpsServicesDisabled, setGpsServicesDisabled] =
+  useState(false);
+const [locationBootLoading, setLocationBootLoading] =
+  useState(false);
 
+const permissionFlowStarted = useRef(false);
   const isRTL = false;
   const locale = "en";
 
+  // 1. REVERSE GEOCODING WITH EXPLICIT PATH STRUCTURE
+  const getAddressFromCoords = async (lat: string, lon: string) => {
+    try {
+      console.log(`📡 Querying LocationIQ reverse geocoding for: ${lat}, ${lon}`);
+      const res = await fetch(
+        `https://us1.locationiq.com/v1/reverse?key=${LOCATION_IQ_TOKEN}&lat=${lat}&lon=${lon}&format=json`
+      );
+      
+      if (!res.ok) throw new Error("LocationIQ Server Rejection");
+      const data = await res.json();
+      setAddressName(data?.display_name || "Street Address Not Found");
+    } catch (e) {
+      console.log("❌ Reverse geocoding failed:", e);
+      setAddressName("Address unavailable offline");
+    }
+  };
+
+  // 2. PARALLEL RESOURCE DATA FETCH ENGINE
   const fetchData = useCallback(async () => {
     if (!id) return;
-
     try {
       const [orderRes, settingsRes] = await Promise.all([
         fetch(`${BASE_URL}/api/orders/${id}`),
@@ -43,7 +70,7 @@ export default function DelivererOrderDetail() {
       ]);
 
       if (!orderRes.ok || !settingsRes.ok) {
-        throw new Error("Server metrics error");
+        throw new Error("Server metrics pool error");
       }
 
       const orderData = await orderRes.json();
@@ -53,209 +80,195 @@ export default function DelivererOrderDetail() {
       setSettings(settingsData);
 
       if (orderData?.latitude && orderData?.longitude) {
+        // Run reverse geocoding safely after data returns
         getAddressFromCoords(orderData.latitude, orderData.longitude);
       }
     } catch (err) {
-      console.error("Fetch Error:", err);
-      Alert.alert(
-        "Error",
-        "Could not synchronize order records from cloud server.",
-      );
+      console.error("❌ Fetch Data Error:", err);
+      Alert.alert("Error", "Could not synchronize order records from cloud server.");
     } finally {
       setLoading(false);
     }
   }, [id]);
 
+  // 3. EFFECT A: MOUNT SEEDING INITIALIZATION
   useEffect(() => {
     setLoading(true);
     setOrder(null);
-    setMyGPS(null);
     setAddressName("Resolving address...");
-
     fetchData();
   }, [id, fetchData]);
 
-  const getAddressFromCoords = async (lat: string, lon: string) => {
-    try {
-      const res = await fetch(
-        `https://us1.locationiq.com/v1/reverse.php?key=${LOCATION_IQ_TOKEN}&lat=${lat}&lon=${lon}&format=json`,
-      );
-
-      if (!res.ok) {
-        throw new Error("Reverse geocoding failed");
-      }
-
-      const data = await res.json();
-
-      setAddressName(data?.display_name || "Street Address Not Found");
-    } catch (e) {
-      console.log("Reverse geocoding error:", e);
-      setAddressName("Address unavailable offline");
-    }
-  };
-
+  // 🎯 4. EFFECT B: THE SERIAL HARDWARE PROMPT INITIALIZER
+  // Guarantees the location prompt displays first, completely clear of network context bottlenecks!
+ // 🎯 4. EFFECT B: THE SERIAL HARDWARE PROMPT INITIALIZER
+  // 🎯 THE COMPLIANT NATIVE GPS TELEMETRY & HARDWARE PERMISSION SYNC PIPELINE
   useEffect(() => {
     let gpsInterval: NodeJS.Timeout;
 
-    const startGpsPush = async () => {
+    const executeHardwarePermissionFlow = async () => {
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
+        console.log("🛰️ Step 1: Hardware telemetry initialization handshake triggered");
 
-        if (status !== "granted") {
-          Alert.alert(
-            "Permission Blocked",
-            "GPS tracking must be active to navigate fleet runs.",
-          );
+        // Check if device hardware foreground permission layers are already provisioned
+        const existingPermission = await Location.getForegroundPermissionsAsync();
+        console.log("📍 Existing System Permission State:", existingPermission.status);
+
+        // 🎯 THE LOOKUP CHECK: If permission has not been approved yet, fire custom branded alert modal overlay
+        if (!existingPermission.granted) {
+          console.log("📍 Hardware tracking permission missing -> deploying modal context");
+          setShowLocationPermissionModal(true);
           return;
         }
 
-        let initialCoords: [number, number] = [34.533, 69.166];
+        // Permission already approved natively -> step forward to initialize live telemetry request tracks
+        await initializeGpsTracking();
 
-        try {
-          const providerStatus = await Location.getProviderStatusAsync();
+      } catch (err: any) {
+        console.error("❌ Critical layout hardware prompt lifecycle exception crash:", err.message || err);
+      }
+    };
 
-          if (providerStatus.locationServicesEnabled) {
-            const lastKnown = await Location.getLastKnownPositionAsync({});
+    const initializeGpsTracking = async () => {
+      try {
+        console.log("✅ Device permission confirmed -> verifying hardware providers chips status");
 
-            if (lastKnown) {
-              initialCoords = [
-                lastKnown.coords.latitude,
-                lastKnown.coords.longitude,
-              ];
-            } else {
-              const initLoc = await Location.getCurrentPositionAsync({
-                accuracy: Location.Accuracy.Balanced,
-              });
+        const providerStatus = await Location.getProviderStatusAsync();
+        console.log("🛰️ Chips Hardware Provider Status:", providerStatus);
 
-              initialCoords = [
-                initLoc.coords.latitude,
-                initLoc.coords.longitude,
-              ];
-            }
-          }
-        } catch (locationHardwareError) {
-          console.log(
-            "Location provider fallback triggered:",
-            locationHardwareError,
-          );
-
-          if (settings?.warehouseLat && settings?.warehouseLng) {
-            initialCoords = [
-              parseFloat(settings.warehouseLat),
-              parseFloat(settings.warehouseLng),
-            ];
-          }
+        // If the smartphone device has its manual toggle switch turned off, fire configuration warning modal overlay
+        if (!providerStatus.locationServicesEnabled) {
+          console.log("📍 System GPS switches turned off -> rendering branded warning modal overlay");
+          setGpsServicesDisabled(true);
+          setShowLocationPermissionModal(true);
+          return;
         }
 
-        setMyGPS(initialCoords);
+        // Pre-fill last known coordinate parameters instantly to bypass network connection gaps on mount
+        let currentLock = await Location.getLastKnownPositionAsync({});
+        if (!currentLock) {
+          currentLock = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+        }
 
-        if (order?.status === "picked_up") {
-          gpsInterval = setInterval(async () => {
+        if (currentLock?.coords) {
+          const mountCoordsArray: [number, number] = [
+            currentLock.coords.latitude,
+            currentLock.coords.longitude,
+          ];
+          console.log("✅ Mount baseline coordinates locked cleanly:", mountCoordsArray);
+          setMyGPS(mountCoordsArray);
+        }
+
+        // 🎯 THE RECONCILED RUNNING BOUNDARIES GATES:
+        // Automatically turns on telemetry distribution streams for BOTH 'confirmed' and 'picked_up' milestones!
+        // This ensures tracking markers show up on maps long before warehouse cargo collection occurs.
+        const isLiveTrackingActive = order?.status === "picked_up" || order?.status === "confirmed";
+
+        if (isLiveTrackingActive) {
+          console.log(`🛵 [HEARTBEAT LOOP ACTIVE] Spinning up streaming synchronizer for state: ${order.status.toUpperCase()}`);
+
+          const syncGpsHeartbeatNode = async () => {
             try {
-              const providerCheck = await Location.getProviderStatusAsync();
-
-              if (!providerCheck.locationServicesEnabled) {
-                return;
-              }
-
               const loc = await Location.getCurrentPositionAsync({
                 accuracy: Location.Accuracy.Balanced,
               });
 
-              const currentCoords: [number, number] = [
+              const trackedPos: [number, number] = [
                 loc.coords.latitude,
                 loc.coords.longitude,
               ];
 
-              setMyGPS(currentCoords);
+              // Update client component view states layouts instantly
+              setMyGPS(trackedPos);
 
+              // Transport verified coordinate strings over the wire to your Hono backend route endpoint
               await fetch(`${BASE_URL}/api/orders/${id}/update-gps`, {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
+                  "Accept": "application/json"
                 },
                 body: JSON.stringify({
-                  lat: currentCoords[0].toString(),
-                  lng: currentCoords[1].toString(),
+                  lat: trackedPos[0].toFixed(6),
+                  lng: trackedPos[1].toFixed(6),
                 }),
               });
 
-              console.log(
-                `🛰️ Dispatching location heartbeat update for Order: ${id}`,
-              );
-            } catch (e) {
-              console.log("GPS Broadcast skip iteration pass...", e);
+              console.log(`🛰️ GPS telemetry heartbeat synced successfully for Order ID: ${id}`);
+            } catch (loopErr: any) {
+              console.log("⚠️ Tracking loop packet iteration pass skipped:", loopErr.message || loopErr);
             }
-          }, 12000);
+          };
+
+          // Execute once immediately on status transition change to refresh edge server cache maps anchors
+          await syncGpsHeartbeatNode();
+
+          // Configure standard clean 12-second streaming loops intervals updates
+          gpsInterval = setInterval(syncGpsHeartbeatNode, 12000);
         }
-      } catch (err) {
-        console.error("Critical GPS framework processing error:", err);
+
+      } catch (gpsErr: any) {
+        console.log("❌ GPS bootstrap initialization tracking routine failed:", gpsErr.message || gpsErr);
       }
     };
 
-    if (order) {
-      startGpsPush();
+    // Only initiate permission checks flows if a valid database record row is loaded
+    if (order?.status) {
+      executeHardwarePermissionFlow();
     }
 
     return () => {
       if (gpsInterval) {
+        console.log("🟡 Disposing driver background tracking interval layer block for order ID:", id);
         clearInterval(gpsInterval);
       }
     };
-  }, [order?.status, id, settings]);
+    
+    // 🎯 RECONCILED FIXED DEPENDENCIES MATRIX FIX:
+    // Stripped out the mutable raw order object block entirely to eliminate infinite loop re-renders!
+  }, [order?.status, id]);
 
-  const updateStatus = async (newStatus: string) => {
+
+   const updateStatus = async (newStatus: string) => {
     try {
       setLoading(true);
-
       const res = await fetch(`${BASE_URL}/api/orders/${id}/status`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          status: newStatus,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
       });
 
       if (res.ok) {
+        // 🎯 SUCCESS SYNC FIX: Re-fetch entire baseline dataset to update states cleanly
         await fetchData();
-
-        Alert.alert(
-          "Success",
-          `Status updated to: ${newStatus.replace("_", " ").toUpperCase()}`,
-        );
+        Alert.alert("Success", `Status updated to: ${newStatus.replace("_", " ").toUpperCase()}`);
       } else {
         throw new Error("Status update failed");
       }
-    } catch (e) {
-      console.log("Update status error:", e);
-
+    } catch (e: any) {
+      console.log("Update status error exception:", e.message);
       Alert.alert("Error", "Update failed.");
     } finally {
       setLoading(false);
     }
   };
 
+
   const toLocalNumbers = (num: string | number) => {
     const str = Math.round(Number(num || 0)).toLocaleString();
-
-    if (locale === "en") {
-      return str;
-    }
-
+    if (locale === "en") return str;
     const easternDigits = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
-
-    return str.replace(/[0-9]/g, (w) => {
-      return easternDigits[parseInt(w)];
-    });
+    return str.replace(/[0-9]/g, (w) => easternDigits[parseInt(w)]);
   };
 
+  
+  // Safe Loading Component Guard View
   if (loading || !order) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#000000" />
-
         <Text style={styles.loaderText}>LOADING DESIRED MANIFEST ROUTE...</Text>
       </View>
     );
@@ -271,22 +284,20 @@ export default function DelivererOrderDetail() {
     parseFloat(order.longitude) || 69.2075,
   ];
 
-  const baseSubtotal = parseFloat(
-    order?.subtotal || order?.subtotalAmount || "0",
-  );
+    // --- Inside app/deliverer/orders/[id].tsx configuration parameters area ---
+  
+  // 🎯 THE SUBTOTAL AUTOMATION FIX: Sum items dynamically from the delivery array to replace subtotal zero
+   // --- Inside app/deliverer/orders/[id].tsx right above your return block ---
+  
+  const baseSubtotal = Array.isArray(order?.items)
+    ? order.items.reduce((sum: number, it: any) => sum + (parseFloat(it.price || '0') * (Number(it.quantity) || 1)), 0)
+    : parseFloat(order?.subtotal || order?.subtotalAmount || "0");
 
-  const rawShippingValue =
-    order?.shipping || order?.shippingAmount || order?.shippingFee;
+  // 🎯 THE ABSOLUTE RESOLUTION: Extract the fresh root shippingFee column cleanly!
+  const parsedShippingFreight = parseFloat(order?.shippingFee || '0');
 
-  const parsedShippingFreight = parseFloat(rawShippingValue?.toString() || "0");
-
-  const markdownDiscount = parseFloat(
-    order?.discount || order?.discountAmount || "0",
-  );
-
-  const totalInvoiceCollectBalance = parseFloat(
-    order?.totalAmount || order?.total_amount || "0",
-  );
+  const markdownDiscount = parseFloat(order?.discount || order?.discountAmount || "0");
+  const totalInvoiceCollectBalance = parseFloat(order?.totalAmount || order?.total_amount || "0");
 
   return (
     <View style={styles.container}>
@@ -358,7 +369,7 @@ export default function DelivererOrderDetail() {
 
               <Text style={styles.contactValue}>{order.phoneNumber}</Text>
             </TouchableOpacity>
-
+            {/* 🎯 THE DUAL ADDRESS EXTRACTION MATRIX FIXED */}
             <View style={styles.addressBox}>
               <View
                 style={[
@@ -378,45 +389,88 @@ export default function DelivererOrderDetail() {
                 <Text style={styles.addressTitleText}>DELIVERY ADDRESS</Text>
               </View>
 
+              {/* 🎯 1. THE USER'S MANUAL INPUT ADDRESS (PRIMARY TEXT CHANNEL)
+                  This extracts what the buyer explicitly typed in the checkout form field,
+                  guaranteeing your drivers can read specific street/house directions instantly! */}
               <Text
                 style={[
                   styles.addressBodyParagraph,
-                  isRTL && {
-                    textAlign: "right",
-                  },
+                  { fontWeight: '800', color: '#000000', marginBottom: 4 },
+                  isRTL && { textAlign: "right" },
                 ]}
               >
-                {addressName}
+                {order.address ? order.address.toUpperCase() : "NO MANUAL ADDRESS ENTERED"}
+              </Text>
+
+              {/* 🎯 2. THE REVERSE GEOCODED HELPER LINE (SECONDARY CHANNEL)
+                  Provides the calculated background GPS location map label text right underneath! */}
+              <Text
+                style={[
+                  styles.addressBodyParagraph,
+                  { fontSize: 11, color: '#666666', fontWeight: '500' },
+                  isRTL && { textAlign: "right" },
+                ]}
+              >
+                📍 Map Location: {addressName}
               </Text>
             </View>
+
           </View>
 
-          <View style={styles.financialManifestCard}>
+          {/* ======================================================
+              🎯 CARGO ITEMS MANIFEST ARRAY LIST SECTION
+              ====================================================== */}
+          <View style={[styles.financialManifestCard, { marginTop: 0, marginBottom: 16 }]}>
             <Text
               style={[
                 styles.manifestSectionTitle,
-                isRTL && {
-                  textAlign: "right",
-                },
+                isRTL && { textAlign: "right" },
               ]}
             >
-              FINANCIAL RECAP STATEMENT
+              ('items') || ASSIGNED CARGO ITEMS .toUpperCase()  ({order.items?.length || 0})
             </Text>
 
-            <View
-              style={[
-                styles.invoiceRowLine,
-                isRTL && {
-                  flexDirection: "row-reverse",
-                },
-              ]}
-            >
-              <Text style={styles.invoiceLabel}>Items Subtotal</Text>
+            {order.items?.map((item: any, idx: number) => {
+              const parsedUnitPrice = parseFloat(item.price || item.unitPrice || '0');
+              const itemQuantity = Number(item.quantity) || 1;
+              const rowItemTotalAmount = parsedUnitPrice * itemQuantity;
 
-              <Text style={styles.invoiceValue}>
-                AFN {toLocalNumbers(baseSubtotal)}
-              </Text>
-            </View>
+              return (
+                <View 
+                  key={`driver-item-row-${item.id || idx}`} 
+                  style={[
+                    { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#F5F5F5' },
+                    isRTL && { flexDirection: 'row-reverse' }
+                  ]}
+                >
+                  <Image
+                    source={{ uri: item.productImage || item.imageUrl }} 
+                    style={{ width: 40, height: 52, backgroundColor: '#FAFAFA', borderWidth: 0.5, borderColor: '#EAEAEA', borderRadius: 2 }} 
+                  />
+                  
+                  <View style={[{ flex: 1, paddingHorizontal: 12 }, isRTL ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]}>
+                    <Text style={{ fontSize: 12, fontWeight: '800', color: '#111111' }} numberOfLines={1}>
+                      {(item.productName || item.name || '').toUpperCase()}
+                    </Text>
+                    
+                    {/* 🎯 THE CRITICAL PARAMS INJECTION: 
+                        Explicitly reveals BOTH selectedSize and selectedColor metadata variables fields natively! 
+                        This ensures couriers verify item variations during warehouse parcel pickups and doorstep collections. */}
+                    <Text style={{ fontSize: 10, color: '#666666', fontWeight: '600', marginTop: 2 }}>
+                      QTY: {itemQuantity}  |  
+                      SIZE: <Text style={{ color: '#000000', fontWeight: '800' }}>{(item.selectedSize || item.size || 'STANDARD').toUpperCase()}</Text>  |  
+                      COLOR: <Text style={{ color: '#000000', fontWeight: '800' }}>{(item.selectedColor || item.color || 'N/A').toUpperCase()}</Text>
+                    </Text>
+                  </View>
+
+                  <Text style={{ fontSize: 12, fontWeight: '900', color: '#000000' }}>
+                    AFN {Math.round(rowItemTotalAmount).toLocaleString()}
+                  </Text>
+                </View>
+              );
+            })}
+          
+
 
             {markdownDiscount > 0 && (
               <View
@@ -525,7 +579,112 @@ export default function DelivererOrderDetail() {
               </Text>
             </TouchableOpacity>
           )}
+          <LocationPermissionModal
+  visible={showLocationPermissionModal}
+  loading={locationBootLoading}
+ title={
+  gpsServicesDisabled
+    ? "Turn On Device Location"
+    : "Enable Live GPS Tracking"
+}
+
+description={
+  gpsServicesDisabled
+    ? "Please enable device GPS services for real-time delivery navigation."
+    : "Brand Gallery Deliveries requires live location access for secure order navigation and fleet synchronization."
+}
+  onClose={() => {
+    setShowLocationPermissionModal(false);
+  }}
+
+onAllow={async () => {
+
+  try {
+
+    setLocationBootLoading(true);
+
+    console.log(
+      "📍 Starting branded GPS activation flow..."
+    );
+
+    // 🎯 STEP 1: CHECK PERMISSION
+    let permission =
+      await Location.getForegroundPermissionsAsync();
+
+    // 🎯 STEP 2: REQUEST IF NOT GRANTED
+    if (!permission.granted) {
+
+      permission =
+        await Location.requestForegroundPermissionsAsync();
+
+      console.log(
+        "📍 Native Permission Response:",
+        permission
+      );
+
+      if (!permission.granted) {
+
+        Alert.alert(
+          "Permission Required",
+          "Location access is required for deliveries."
+        );
+
+        return;
+      }
+    }
+
+    // 🎯 STEP 3: FORCE ANDROID GPS ENABLE POPUP
+    const currentPosition =
+      await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+    // 🎯 ANDROID AUTOMATICALLY ENABLED GPS
+    console.log(
+      "✅ GPS hardware activated successfully"
+    );
+
+    // 🎯 STEP 4: STORE LIVE COORDS
+    if (currentPosition?.coords) {
+
+      setMyGPS([
+        currentPosition.coords.latitude,
+        currentPosition.coords.longitude,
+      ]);
+
+      console.log(
+        "✅ Live GPS Coordinates:",
+        currentPosition.coords
+      );
+    }
+
+    // 🎯 STEP 5: CLOSE MODAL
+    setShowLocationPermissionModal(false);
+
+    // 🎯 STEP 6: RESET STATE
+    setGpsServicesDisabled(false);
+
+  } catch (err) {
+
+    console.log(
+      "❌ Native permission sequence failed",
+      err
+    );
+
+    Alert.alert(
+      "GPS Required",
+      "Please enable device location services for delivery tracking."
+    );
+
+  } finally {
+
+    setLocationBootLoading(false);
+  }
+}}
+/>
         </View>
+
+
       </ScrollView>
     </View>
   );

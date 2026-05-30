@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useRef, useEffect, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator, Platform, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Platform, TouchableOpacity, Dimensions } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 type UnifiedMapProps = {
@@ -22,6 +22,7 @@ export default function UnifiedMap({
 }: UnifiedMapProps) {
   const webViewRef = useRef<WebView>(null);
   const [loading, setLoading] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // 1. EXTRACT EXPLICIT COORDINATES WITH STABLE DEFAULT FALLBACKS
   const whLat = warehouseCoords[0];
@@ -47,6 +48,18 @@ export default function UnifiedMap({
     }
   }, [drvLat, drvLng, hasDriver]);
 
+  // Dynamic map canvas dimensions redraw sync
+  useEffect(() => {
+    if (!loading) {
+      webViewRef.current?.injectJavaScript(`
+        if (typeof map !== 'undefined') {
+          map.invalidateSize();
+        }
+        true;
+      `);
+    }
+  }, [isFullscreen, loading]);
+
   const handleMessage = (event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
@@ -66,7 +79,7 @@ export default function UnifiedMap({
         <meta name="viewport" content="width=device-width, initial-scale=0.8, maximum-scale=1.0, user-scalable=no" />
         
         <!-- Fully qualified, explicit CDN paths for Leaflet -->
-       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
               integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
               crossorigin=""/>
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -74,7 +87,14 @@ export default function UnifiedMap({
                 crossorigin=""></script>
         
         <style>
-          body { margin: 0; padding: 0; }
+           html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            overflow: hidden !important;
+            background-color: #FAFAFA;
+          }
           #map { height: 100vh; width: 100vw; background: #e0e0e0; }
           .icon-label { font-size: 24px; text-align: center; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3)); }
         </style>
@@ -178,7 +198,6 @@ export default function UnifiedMap({
                     [rawWhLat, rawWhLng],
                     [rawDestLat, rawDestLng]
                   ]);
-                  // 🎯 FIXED: Restored layout bounding padding coordinates cleanly
                   map.fitBounds(bounds, { padding: [40, 40] });
                 }
               })
@@ -191,77 +210,85 @@ export default function UnifiedMap({
       </html>
     `;
   }, [role, whLat, whLng, destLat, destLng, drvLat, drvLng, hasDriver, hasWarehouse, hasDest, centerLat, centerLng]);
-
-  // ... (Your existing mapHtml useMemo compilation logic remains 100% untouched above)
-
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isFullscreen && styles.fullscreenContainer]}>
+      
+      {/* 🎯 FLOATING BACK EXIT ACTION BUTTON (Only pops up during full screen maps mode) */}
+      {isFullscreen && (
+        <TouchableOpacity 
+          style={styles.fullscreenCloseFloatingBtn}
+          activeOpacity={0.8}
+          onPress={() => setIsFullscreen(false)}
+        >
+          <Ionicons name="arrow-back-sharp" size={22} color="#000000" />
+        </TouchableOpacity>
+      )}
+
       {/* NATIVE INTERFACE WEB VIEW BROWSING BRIDGE */}
       <WebView
         ref={webViewRef}
         originWhitelist={['*']}
         source={{ html: mapHtml }}
         onLoadEnd={() => setLoading(false)}
-        onMessage={handleMessage} 
+        onMessage={handleMessage}
         javaScriptEnabled={true}
         domStorageEnabled={true}
         style={styles.map}
       />
 
-      {/* 🎯 FLOATING HOOD MAP UTILITY SYSTEM CONTROLS BUTTONS TRAY */}
+      {/* FLOATING MAP CONTROLS */}
       {!loading && (
         <View style={styles.floatingControlsGroup}>
-          {/* Zoom In Button Control Anchor */}
-          <TouchableOpacity 
-            style={styles.controlPillBtn} 
+
+          {/* ZOOM IN */}
+          <TouchableOpacity
+            style={styles.controlPillBtn}
             activeOpacity={0.7}
-            onPress={() => webViewRef.current?.injectJavaScript('map.zoomIn();')}
+            onPress={() =>
+              webViewRef.current?.injectJavaScript(`
+                map.zoomIn();
+                true;
+              `)
+            }
           >
             <Ionicons name="add-sharp" size={20} color="#000000" />
           </TouchableOpacity>
-          
+
           <View style={styles.pillHairlineDivider} />
 
-          {/* Zoom Out Button Control Anchor */}
-          <TouchableOpacity 
-            style={styles.controlPillBtn} 
+          {/* ZOOM OUT */}
+          <TouchableOpacity
+            style={styles.controlPillBtn}
             activeOpacity={0.7}
-            onPress={() => webViewRef.current?.injectJavaScript('map.zoomOut();')}
+            onPress={() =>
+              webViewRef.current?.injectJavaScript(`
+                map.zoomOut();
+                true;
+              `)
+            }
           >
             <Ionicons name="remove-sharp" size={20} color="#000000" />
           </TouchableOpacity>
 
           <View style={styles.pillHairlineDivider} />
 
-          {/* 🎯 FULL VIEW AUTO-MAXIMIZE ACCORDION CAMERA TOGGLE LINK */}
-          {/* Automatically repositions web view camera boundaries around your hardware pins metrics */}
-          <TouchableOpacity 
-            style={styles.controlPillBtn} 
+          {/* FULLSCREEN TOGGLE */}
+          <TouchableOpacity
+            style={styles.controlPillBtn}
             activeOpacity={0.7}
-            onPress={() => {
-              const boundsJsMacro = `
-                if (typeof map !== 'undefined') {
-                  var activeMarkersGroup = [];
-                  map.eachLayer(function(layer) {
-                    if (layer instanceof L.Marker) {
-                      activeMarkersGroup.push(layer.getLatLng());
-                    }
-                  });
-                  if (activeMarkersGroup.length > 0) {
-                    var mapBoundsLimits = L.latLngBounds(activeMarkersGroup);
-                    map.fitBounds(mapBoundsLimits, { padding: [50, 50] });
-                  }
-                }
-              `;
-              webViewRef.current?.injectJavaScript(boundsJsMacro);
-            }}
+            onPress={() => setIsFullscreen(prev => !prev)}
           >
-            <Ionicons name="expand-sharp" size={16} color="#000000" />
+            <Ionicons
+              name={isFullscreen ? "contract-sharp" : "scan-sharp"}
+              size={18}
+              color="#000000"
+            />
           </TouchableOpacity>
+
         </View>
       )}
 
-      {/* COMPACT LOADER ACCENT PANEL SPLASH GATES */}
+      {/* LOADER */}
       {loading && (
         <View style={styles.loaderCover}>
           <ActivityIndicator size="small" color="#000000" />
@@ -271,25 +298,59 @@ export default function UnifiedMap({
   );
 }
 
-// 🎯 INDUSTRIAL STUDIO VIEW STYLESHEET WITH OVERLAY MARKERS CODES
+// 🎯 CLEANLY RE-STRUCTURED MONOCHROME STYLESHEET MATRIX
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#E0E0E0', 
-    position: 'relative' 
+  container: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#E0E0E0',
+    position: 'relative'
   },
-  map: { 
-    flex: 1 
+  // THE FULLSCREEN CONTAINER MATRIX OVERLAY
+  fullscreenContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
+    zIndex: 99999, 
+    elevation: 99999,
+    backgroundColor: '#FFFFFF'
   },
-  loaderCover: { 
-    ...StyleSheet.absoluteFillObject, 
-    backgroundColor: '#F8F9FA', 
-    justifyContent: 'center', 
+  // FLOATING MINIMALIST MONOCHROME BACK ARROW ACTION BUTTON LINK
+  fullscreenCloseFloatingBtn: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 55 : 30,
+    left: 20,
+    zIndex: 100000,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 99 
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
+    elevation: 6,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4
   },
-
-  // 🎯 FLOATING HOOD CONTAINER MATRIX LAYOUT RULES
+  map: {
+    flex: 1,
+    width: '100%',
+    height: '100%'
+  },
+  loaderCover: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 99
+  },
   floatingControlsGroup: {
     position: 'absolute',
     bottom: 24,
@@ -298,13 +359,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#EFEFEF',
     borderRadius: 2,
-    // Native shadow boundaries elevation structures layers encryption profiles
     elevation: 4,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
-    zIndex: 1000
+    zIndex: 100000
   },
   controlPillBtn: {
     width: 38,

@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { Ionicons } from '@expo/vector-icons';
 
-const API_URL = "https://brand-gallery-backend.brand-gallery.workers.dev";
+const API_URL = "http://192.168.1.3:8787";
 
 export default function DelivererOrders() {
   const router = useRouter();

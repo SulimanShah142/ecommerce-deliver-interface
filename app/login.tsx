@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Platform, KeyboardAvoidingView } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { OneSignal } from 'react-native-onesignal';
 
-const API_URL = "https://brand-gallery-backend.brand-gallery.workers.dev";
+const API_URL = "http://192.168.1.3:8787";
 
 export default function DelivererLogin() {
   const [email, setEmail] = useState('');
@@ -47,6 +47,11 @@ export default function DelivererLogin() {
   };
 
 return (
+  <KeyboardAvoidingView
+    style={{ flex: 1 }}
+    behavior={Platform.OS === "ios" ? "padding" : "height"}
+    keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
+  >
   <View style={styles.container}>
     <View style={styles.header}>
       <Text style={styles.brandTitle}>BG FLEET</Text>
@@ -89,6 +94,8 @@ return (
       <Text style={styles.footerText}>SECURE GATEWAY v1.0.4</Text>
     </View>
   </View>
+  </KeyboardAvoidingView>
+
 );
 
 }
