@@ -169,27 +169,56 @@ export const verification = pgTable(
 
 
 // 3. CATEGORIES (With SHEIN-style nesting)
+// =========================================================================
 export const categories = pgTable('categories', {
   id: uuid('id').primaryKey().defaultRandom(),
-  name: text('name').notNull(),
-  description: text('description'),
+  
+  // 🗺️ LOCALE STRING CHANNELS: 
+  // Admin inputs these fields explicitly inside the Management Portal on save.
+  name: text('name').notNull(),                  // English Default (e.g., "Dresses")
+  namePs: text('name_ps'),                       // Pashto Translation (e.g., "جامې")
+  nameFa: text('name_fa'),                       // Dari/Persian Translation (e.g., "لباس‌ها")
+  
+  description: text('description'),              // English Default
+  descriptionPs: text('description_ps'),         // Pashto Description
+  descriptionFa: text('description_fa'),         // Dari Description
+
   imageUrl: text('image_url'),
   isActive: boolean('is_active').default(true),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// 4. SIMPLIFIED PRODUCTS (Variants merged into arrays for ease of use)
+// =========================================================================
+// 🎯 2. MULTILINGUAL PRODUCTS TABLE SCHEMA
+// =========================================================================
 export const products = pgTable('products', {
   id: uuid('id').primaryKey().defaultRandom(),
   categoryId: uuid('category_id').references(() => categories.id),
-  name: text('name').notNull(),
-  description: text('description'),
+  
+  // 🗺️ LOCALE STRING CHANNELS: Product Identifiers
+  name: text('name').notNull(),                  // English Default (e.g., "Silk Abaya")
+  namePs: text('name_ps'),                       // Pashto Translation (e.g., "وریښمین ابایا")
+  nameFa: text('name_fa'),                       // Dari Translation (e.g., "عبای ابریشمی")
+  
+  description: text('description'),              // English Default
+  descriptionPs: text('description_ps'),         // Pashto Description
+  descriptionFa: text('description_fa'),         // Dari Description
+
   usdPrice: numeric('usd_price', { precision: 10, scale: 2 }).notNull(),
   imageUrl: text('image_url'),
   
-  // Stored as arrays for simple selectors
-  availableSizes: text("available_sizes").array(), // ['S', 'M', 'L']
-  availableColors: text("available_colors").array(), // ['Black', 'White']
+  // Baseline sizes array selector (Sizes are typically universal characters like S, M, L, XL)
+  availableSizes: text("available_sizes").array(), 
+
+  // 🗺️ LOCALE ARRAYS MATRIX (SHEIN-STYLE MULTILINGUAL ATTRIBUTES):
+  // Admin provides matching array sets in sequence inside the form.
+  // Example: 
+  // availableColors = ['Black', 'Red']
+  // availableColorsPs = ['تور', 'سور']
+  // availableColorsFa = ['سیاه', 'سرخ']
+  availableColors: text("available_colors").array(),     // English Colors List Array
+  availableColorsPs: text("available_colors_ps").array(), // Pashto Colors List Array
+  availableColorsFa: text("available_colors_fa").array(), // Dari Colors List Array
   
   stockQuantity: integer('stock_quantity').default(0),
   isAvailable: boolean('is_available').default(true),
@@ -355,6 +384,7 @@ export const deliverers = pgTable("deliverers", {
   password: text("password").notNull(), // Admin sets this
   phoneNumber: text("phone_number"),
   status: text("status").default("idle"), // idle, busy, offline
+  isAvailable: boolean("is_available").default(true),
   currentLat: decimal("current_lat"),
   currentLng: decimal("current_lng"),
   createdAt: timestamp("created_at").defaultNow(),

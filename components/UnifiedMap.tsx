@@ -10,6 +10,8 @@ type UnifiedMapProps = {
   driverCoords: [number, number] | null; 
   orderStatus?: string;
   orderId?: string;
+  isFullscreen?: boolean;
+  setIsFullscreen?: (value: boolean) => void;
 };
 
 export default function UnifiedMap({
@@ -18,11 +20,15 @@ export default function UnifiedMap({
   destinationCoords,
   driverCoords,
   orderStatus = 'confirmed',
-  orderId
+  orderId,
+  isFullscreen = false,
+  setIsFullscreen
 }: UnifiedMapProps) {
   const webViewRef = useRef<WebView>(null);
   const [loading, setLoading] = useState(true);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [internalFullscreen, setInternalFullscreen] = useState(false);
+  const hasExternalFullscreenControl = typeof setIsFullscreen === 'function';
+  const activeFullscreen = hasExternalFullscreenControl ? isFullscreen : internalFullscreen;
 
   // 1. EXTRACT EXPLICIT COORDINATES WITH STABLE DEFAULT FALLBACKS
   const whLat = warehouseCoords[0];
@@ -58,7 +64,7 @@ export default function UnifiedMap({
         true;
       `);
     }
-  }, [isFullscreen, loading]);
+  }, [activeFullscreen, loading]);
 
   const handleMessage = (event: any) => {
     try {
@@ -211,14 +217,20 @@ export default function UnifiedMap({
     `;
   }, [role, whLat, whLng, destLat, destLng, drvLat, drvLng, hasDriver, hasWarehouse, hasDest, centerLat, centerLng]);
   return (
-    <View style={[styles.container, isFullscreen && styles.fullscreenContainer]}>
+    <View style={[styles.container, activeFullscreen && styles.fullscreenContainer]}>
       
       {/* 🎯 FLOATING BACK EXIT ACTION BUTTON (Only pops up during full screen maps mode) */}
-      {isFullscreen && (
+      {activeFullscreen && (
         <TouchableOpacity 
           style={styles.fullscreenCloseFloatingBtn}
           activeOpacity={0.8}
-          onPress={() => setIsFullscreen(false)}
+          onPress={() => {
+            if (hasExternalFullscreenControl) {
+              setIsFullscreen?.(false);
+            } else {
+              setInternalFullscreen(false);
+            }
+          }}
         >
           <Ionicons name="arrow-back-sharp" size={22} color="#000000" />
         </TouchableOpacity>
@@ -276,10 +288,16 @@ export default function UnifiedMap({
           <TouchableOpacity
             style={styles.controlPillBtn}
             activeOpacity={0.7}
-            onPress={() => setIsFullscreen(prev => !prev)}
+            onPress={() => {
+            if (hasExternalFullscreenControl) {
+              setIsFullscreen?.(!isFullscreen);
+            } else {
+              setInternalFullscreen(prev => !prev);
+            }
+          }}
           >
             <Ionicons
-              name={isFullscreen ? "contract-sharp" : "scan-sharp"}
+              name={activeFullscreen ? "contract-sharp" : "scan-sharp"}
               size={18}
               color="#000000"
             />

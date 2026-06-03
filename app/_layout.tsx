@@ -1,59 +1,142 @@
-import { Tabs } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import React, { useState, useEffect , useMemo} from 'react';
+import { View, Text, Image, TouchableOpacity, Alert, ActivityIndicator, Platform, TextInput, StyleSheet } from 'react-native';
+import { useRouter,  Tabs } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import { OneSignal } from 'react-native-onesignal';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, StyleSheet, View, Text, Image, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Location from 'expo-location'; 
-// 🎯 THE FIX: Imported your unified badge provider and consumption hook!
-import { BadgeProvider, useBadges } from '@/Contexts/BadgeContext';
+import * as SplashScreen from 'expo-splash-screen';
 
-const BASE_URL = "https://brand-gallery-backend.brand-gallery.workers.dev"; // Updated to your live production address
+// 🎯 THE CRITICAL CORE IMPORT: Secure the native OneSignal hardware controller channel!
+import { OneSignal } from 'react-native-onesignal';
+import { useBadges, BadgeProvider } from '@/Contexts/BadgeContext';
 
-// 🎯 PART 1: THE CHILD LAYOUT CONTENT
+const BASE_URL = "http://192.168.1.4:8787";
+const COURIER_APP_ID = "32271ebd-e2b6-4562-b765-dd50eb88b966"; // Your precise Fleet App ID
+
 function DriverLayoutContent() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [appIsReady, setAppIsReady] = useState(false);
   const [delivererId, setDelivererId] = useState<string | null>(null);
-  
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // 🎯 THE FIX: Consume your real-time courier orders badge state counter parameter
   const { delivererOrdersBadge, clearDelivererOrders } = useBadges();
+  const isRTL = false;
+  const locale = "en";
 
-  // 1. ONE-TIME INITIALIZATION & PUSH PERMISSION SCHEMAS
+  // 🎯 HIGH-UTILITY MODULAR ONESIGNAL DRIVER IDENTITY MAPPER
+  const bindOneSignalDriverToken = async (driverId: string) => {
+    try {
+      const cleanDriverUuid = String(driverId).trim();
+      if (!cleanDriverUuid) return;
+
+      console.log(`📡 [ONESIGNAL FLEET] Binding hardware push tokens to Driver Alias: ${cleanDriverUuid}`);
+      
+      // Forces native token registration pass asynchronously
+      OneSignal.login(cleanDriverUuid);
+      
+      // Set explicit tagging matrices to allow targeted group dispatch sends (e.g. active drivers pool)
+      OneSignal.User.addTag("role", "DELIVERER");
+      OneSignal.User.addTag("driver_id", cleanDriverUuid);
+      
+      console.log("✅ [ONESIGNAL FLEET] Hardware registration mapped onto device lanes successfully.");
+    } catch (err: any) {
+      console.warn("⚠️ OneSignal device identity binding deferred:", err.message || err);
+    }
+  };
+
+  // 🎯 UNIFIED PARALLEL SECURED FLEET INITIALIZATION ENGINE
   useEffect(() => {
-    OneSignal.initialize("32271ebd-e2b6-4562-b765-dd50eb88b966"); 
-
-    // 🎯 THE FIX: Force phone to prompt push permissions on load to generate tracking ID
-    OneSignal.Notifications.requestPermission(true).then((granted) => {
-      console.log("🔔 Driver Push Notification Authorization Verified:", granted);
-    }).catch(err => console.warn("⚠️ Push permissions initialization stalled:", err));
-  }, []);
-
-  // 2. Core Authorization Lookup
-  useEffect(() => {
-    const checkActiveSession = async () => {
+    async function prepareFleetSystem() {
       try {
+        console.log("⚙️ Booting fleet logistics infrastructure systems...");
+
+        // 1. Hard-initialize native OneSignal parameters right on instant boot pass
+        OneSignal.initialize(COURIER_APP_ID);
+
+        // 2. Request notification privileges explicitly to ensure driver tokens compile safely
+        const pushGranted = await OneSignal.Notifications.requestPermission(true);
+        console.log("🔔 Driver Push Notification Authorization Status:", pushGranted);
+
+        // 3. Resolve historical device profile sessions registry parameters keys
         const storedId = await SecureStore.getItemAsync('deliverer_id');
+        
         if (storedId) {
-          setDelivererId(storedId);
-          OneSignal.login(storedId);
+          const cleanStoredId = String(storedId).trim();
+          console.log(`📡 [SECURITY SWEEP] Verifying fleet record existence for token ID: ${cleanStoredId}`);
+          
+          const validationCheckResponse = await fetch(`${BASE_URL}/api/deliverer/verify-account/${cleanStoredId}`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+          }).catch(() => null);
+
+          if (validationCheckResponse && validationCheckResponse.ok) {
+            const verificationPayloadData = await validationCheckResponse.json();
+            
+            const isSessionGenuinelyValid = verificationPayloadData && (
+              verificationPayloadData.success === true ||
+              verificationPayloadData.exists === true ||
+              verificationPayloadData.active === true ||
+              (verificationPayloadData.id && String(verificationPayloadData.id) === cleanStoredId)
+            );
+
+            if (isSessionGenuinelyValid) {
+              setDelivererId(cleanStoredId);
+              await bindOneSignalDriverToken(cleanStoredId);
+              console.log(`✅ [SECURE ACCESS GRANTED] Deliverer #${cleanStoredId} session active.`);
+            } else {
+              throw new Error("ACCOUNT_PURGED_BY_ADMINISTRATOR");
+            }
+          } else if (validationCheckResponse && validationCheckResponse.status === 404) {
+            throw new Error("ACCOUNT_PURGED_BY_ADMINISTRATOR");
+          } else {
+            // Offline Fallback Mode: If server validation is offline, preserve the cached session to ensure continuity!
+            setDelivererId(cleanStoredId);
+            await bindOneSignalDriverToken(cleanStoredId);
+            console.log(`⚠️ [OFFLINE FALLBACK] Preserving cached driver session ${cleanStoredId} while edge network is unavailable.`);
+          }
         }
-      } catch (e) {
-        console.error("⚠️ Failed to parse secure storage registry keys:", e);
+
+        // 4. Force execution delay padding for clean hardware rendering lookups
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+      } catch (e: any) {
+        console.warn("⚠️ [SECURITY INTERCEPT] Fleet session verification dropped:", e.message);
+        
+        if (e.message === "ACCOUNT_PURGED_BY_ADMINISTRATOR") {
+          console.log("🚨 [FORCED LOGOUT] Orphaned session trace caught. Flushing keys down to storage disk...");
+          
+          await SecureStore.deleteItemAsync('deliverer_id').catch(() => {});
+          await SecureStore.deleteItemAsync('deliverer_name').catch(() => {});
+          await SecureStore.deleteItemAsync('deliverer_email').catch(() => {});
+          
+          try {
+            OneSignal.logout();
+          } catch {}
+          
+          setDelivererId(null);
+          setEmailInput('');
+          setPasswordInput('');
+          
+          Alert.alert(
+            "Access Revoked", 
+            "Your courier dispatch profile session is no longer active on the central fleet servers. Please contact management."
+          );
+          router.replace('/login');
+        }
       } finally {
-        setIsAuthLoading(false);
+        setAppIsReady(true);
+        SplashScreen.hideAsync().catch(() => {});
       }
-    };
-    checkActiveSession();
+    }
+
+    prepareFleetSystem();
   }, []);
 
-  // 3. Stateless HTTP Login Submission Pipeline
+  // Stateless HTTP Login Submission Pipeline
   const handleDriverSignIn = async () => {
     if (!emailInput.trim() || !passwordInput.trim()) {
       return Alert.alert("Required Fields", "Please complete your login credentials.");
@@ -71,9 +154,14 @@ function DriverLayoutContent() {
 
       const data = await res.json();
       if (res.ok && data?.id) {
-        await SecureStore.setItemAsync('deliverer_id', data.id.toString());
-        setDelivererId(data.id.toString());
-        OneSignal.login(data.id.toString());
+        const cleanDriverId = String(data.id).trim();
+        await SecureStore.setItemAsync('deliverer_id', cleanDriverId);
+        if (data.name) await SecureStore.setItemAsync('deliverer_name', String(data.name).trim());
+        await SecureStore.setItemAsync('deliverer_email', emailInput.toLowerCase().trim());
+        
+        setDelivererId(cleanDriverId);
+        await bindOneSignalDriverToken(cleanDriverId);
+        
         Alert.alert("Success", `Welcome back, ${data.name || 'Driver'}`);
       } else {
         Alert.alert("Authentication Failed", data?.error || "Invalid driver credentials provided.");
@@ -92,16 +180,24 @@ function DriverLayoutContent() {
         text: "Log Out",
         style: "destructive",
         onPress: async () => {
-          await SecureStore.deleteItemAsync('deliverer_id');
+          try {
+            OneSignal.logout();
+          } catch {}
+          await SecureStore.deleteItemAsync('deliverer_id').catch(() => {});
+          await SecureStore.deleteItemAsync('deliverer_name').catch(() => {});
+          await SecureStore.deleteItemAsync('deliverer_email').catch(() => {});
+          
           setDelivererId(null);
           setEmailInput('');
           setPasswordInput('');
+          router.replace('/login');
         }
       }
     ]);
   };
 
-  // 4. UNIFIED FLAT TOP HEADER RENDERING CORE
+
+  // UNIFIED FLAT TOP HEADER RENDERING CORE
   const renderGlobalHeader = () => (
     <View style={[styles.globalHeader, { paddingTop: insets.top + 8 }]}>
       <View style={styles.brandCluster}>
@@ -122,9 +218,9 @@ function DriverLayoutContent() {
     </View>
   );
 
-  // 5. DYNAMIC SYSTEM TAB CLEARANCE MATRIX
+  // DYNAMIC SYSTEM TAB CLEARANCE MATRIX
   const tabBarStyleWithInsets = useMemo(() => {
-    const baseHeight = 64; 
+    const baseHeight = 56; 
     const bottomPadding = insets.bottom > 0 ? insets.bottom : 12;
     return {
       ...styles.tabBar,
@@ -133,15 +229,24 @@ function DriverLayoutContent() {
     };
   }, [insets.bottom]);
 
-  if (isAuthLoading) {
+  // --- 3. PREMIUM RENDER-FALLBACK BRANDED INLINE SPLASH OVERLAY CELL ---
+  if (!appIsReady) {
     return (
-      <View style={styles.centerFallback}>
-        <ActivityIndicator size="large" color="#000000" />
+      <View style={styles.splashContainer}>
+        <Image 
+          source={require('@/assets/images/splash-image.jpg')} 
+          style={styles.splashImage}
+          resizeMode="contain"
+        />
+        <View style={styles.splashFooter}>
+          <ActivityIndicator size="small" color="#000000" />
+          <Text style={styles.splashSubtitle}>INITIALIZING FLEET INFRASTRUCTURE SYSTEMS...</Text>
+        </View>
       </View>
     );
   }
 
-  // --- 6. RENDER INLINE EMBEDDED AUTH COMPONENT GATES IF UNVERIFIED ---
+  // --- 4. RENDER INLINE EMBEDDED AUTH COMPONENT GATES IF UNVERIFIED ---
   if (!delivererId) {
     return (
       <View style={[styles.loginContainer, { paddingTop: insets.top + 40 }]}>
@@ -194,7 +299,6 @@ function DriverLayoutContent() {
       </View>
     );
   }
-
   // --- 7. UNLOCKED CORE PLATFORM TABS LAYOUT ROUTER TREE ---
   return (
     <Tabs
@@ -257,6 +361,10 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
+   splashContainer: { flex: 1, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center' },
+    splashImage: { width: '65%', height: '40%' },
+    splashFooter: { position: 'absolute', bottom: 60, alignItems: 'center', gap: 12 },
+    splashSubtitle: { fontSize: 10, fontWeight: '800', color: '#999999', letterSpacing: 2, marginTop: 5 },
   centerFallback: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' },
   globalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', paddingHorizontal: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
   brandCluster: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -267,4 +375,4 @@ const styles = StyleSheet.create({
  exitActionBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
  tabBar: { backgroundColor: '#FFFFFF', borderTopWidth: 0.5, borderTopColor: '#EFEFEF' },
  tabLabel: { fontSize: 8, fontWeight: '900', letterSpacing: 0.5, marginTop: -2 },tabItem: { paddingTop: 6 },loginContainer: { flex: 1, backgroundColor: '#FFFFFF', paddingHorizontal: 30 },loginBrandingHeader: { alignItems: 'center', marginBottom: 40, marginTop: 40 },loginCenterLogo: { width: 60, height: 60, marginBottom: 16 },loginBrandTitle: { fontSize: 24, fontWeight: '900', color: '#000000', letterSpacing: 2 },loginBrandSubtitle: { fontSize: 9, fontWeight: '800', color: '#999999', letterSpacing: 1.5, marginTop: 4 },loginFormBlock: { width: '100%' },inputWrapperField: { marginBottom: 25 },fieldInputLabel: { fontSize: 9, fontWeight: '900', color: '#000000', letterSpacing: 1, marginBottom: 8 },formInputField: { borderBottomWidth: 1, borderBottomColor: '#EFEFEF', paddingVertical: 10, fontSize: 14, color: '#000000', fontWeight: '600' },loginCommitButton: { backgroundColor: '#000000', paddingVertical: 16, alignItems: 'center', borderRadius: 2, marginTop: 15 },loginCommitButtonText: { color: '#FFFFFF', fontSize: 11, fontWeight: '900', letterSpacing: 1 },
- pillstabBadgeIndicator: { position: 'absolute', top: -4, right: -8, backgroundColor: '#000000', minWidth: 14, height: 14, borderRadius: 7, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },tabBadgeText: { color: '#FFFFFF', fontSize: 7, fontWeight: '900' }});
+  tabBadgeIndicator: { position: 'absolute', top: -4, right: -8, backgroundColor: '#000000', minWidth: 14, height: 14, borderRadius: 7, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },tabBadgeText: { color: '#FFFFFF', fontSize: 7, fontWeight: '900' }});

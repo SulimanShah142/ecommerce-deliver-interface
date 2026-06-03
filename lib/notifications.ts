@@ -1,31 +1,52 @@
-import { OneSignal, LogLevel } from 'react-native-onesignal';
-import Constants from 'expo-constants';
+import { OneSignal } from 'react-native-onesignal';
 import { Platform } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 
-const ONESIGNAL_APP_ID ="32271ebd-e2b6-4562-b765-dd50eb88b966"
+const ONESIGNAL_APP_ID = "32271ebd-e2b6-4562-b765-dd50eb88b966";
+const PUSH_SUBSCRIPTION_KEY = 'deliverer_push_subscription_id';
 
 export const initOneSignal = async () => {
   try {
-    // 1. Initialize with your specific App ID
-    OneSignal.initialize("32271ebd-e2b6-4562-b765-dd50eb88b966"); // Use Admin or Deliver App ID
+    OneSignal.initialize(ONESIGNAL_APP_ID);
 
-    // 2. CRITICAL FIX FOR ANDROID 13+: Explicitly force OneSignal to handle the permission prompt
     if (Platform.OS === 'android') {
       console.log("🛰️ Triggering Native OneSignal Android Permission Prompt...");
-      
-      // This forces the OneSignal SDK to register the user's click directly
       const accepted = await OneSignal.Notifications.requestPermission(true);
       console.log("🔔 OneSignal Permission State Checked:", accepted);
     } else {
-      // iOS handling
-      OneSignal.Notifications.requestPermission(true);
+      await OneSignal.Notifications.requestPermission(true);
     }
 
-    // 3. Capture and log the structural Subscription ID
-    const subId = await OneSignal.User.pushSubscription.getIdAsync();
-    console.log("🔑 Active Linked Hardware ID:", subId);
+    const subscriptionId = await OneSignal.User.pushSubscription.getIdAsync();
+    console.log("🔑 OneSignal push subscription ID:", subscriptionId);
 
+    if (subscriptionId) {
+      await SecureStore.setItemAsync(PUSH_SUBSCRIPTION_KEY, subscriptionId);
+    }
+
+    return subscriptionId;
   } catch (error) {
     console.error("❌ OneSignal Native Boot Failure:", error);
+    return null;
+  }
+};
+
+export const registerOneSignalUser = async (delivererId: string) => {
+  try {
+    if (!delivererId) return;
+
+    if (typeof OneSignal.setExternalUserId === 'function') {
+      OneSignal.setExternalUserId(delivererId);
+    } else if (typeof OneSignal.login === 'function') {
+      OneSignal.login(delivererId);
+    }
+
+    const subscriptionId = await OneSignal.User.pushSubscription.getIdAsync();
+    if (subscriptionId) {
+      await SecureStore.setItemAsync(PUSH_SUBSCRIPTION_KEY, subscriptionId);
+      console.log(`📲 OneSignal registered deliverer ${delivererId} with subscription ${subscriptionId}`);
+    }
+  } catch (error) {
+    console.error("❌ OneSignal user registration failed:", error);
   }
 };

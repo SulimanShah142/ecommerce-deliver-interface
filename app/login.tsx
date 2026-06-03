@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { OneSignal } from 'react-native-onesignal';
 
-const API_URL = "http://192.168.1.3:8787";
+const API_URL = "http://192.168.1.4:8787";
 
 export default function DelivererLogin() {
   const [email, setEmail] = useState('');
@@ -17,6 +17,7 @@ export default function DelivererLogin() {
 
     setLoading(true);
     try {
+      console.log("🔐 Dispatching secure lightweight fleet login request...");
       const res = await fetch(`${API_URL}/api/deliverer/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -25,22 +26,30 @@ export default function DelivererLogin() {
 
       const data = await res.json();
 
-      if (res.ok) {
-        // 1. Save locally
-        await SecureStore.setItemAsync('deliverer_id', data.id);
-        await SecureStore.setItemAsync('deliverer_name', data.name);
-          await SecureStore.setItemAsync('deliverer_email', email); 
+      if (res.ok && data?.id) {
+        // 🎯 THE CRITICAL PROTECTION FIX: Force absolute string coercion!
+        // This ensures the ID stored matches exactly what your root layout's 
+        // fetch sweep loops check for on automatic initialization mounts.
+        const serializedDriverId = String(data.id).trim();
+        const serializedDriverName = String(data.name || 'Driver').trim();
+
+        // 1. Save standardized records down to local SecureStore disk tracks
+        await SecureStore.setItemAsync('deliverer_id', serializedDriverId);
+        await SecureStore.setItemAsync('deliverer_name', serializedDriverName);
+        await SecureStore.setItemAsync('deliverer_email', email.toLowerCase().trim()); 
         
-        // 2. Immediate OneSignal Login
-        OneSignal.login(data.id); 
+        // 2. Immediate OneSignal Profile Link Alignment Mapping
+        OneSignal.login(serializedDriverId); 
+        console.log(`✅ [LOGIN SUCCESS] Fleet token allocated for Deliverer #${serializedDriverId}`);
         
-        // 3. Absolute path to break loops
-        router.replace('./orders'); 
+        // 3. Redirect to the root tabbed dashboard after login
+        router.replace('/'); 
       } else {
-        Alert.alert("Failed", data.error || "Invalid credentials");
+        Alert.alert("Authentication Failed", data.error || "Invalid driver credentials provided.");
       }
-    } catch (e) {
-      Alert.alert("Error", "Unable to connect to server.");
+    } catch (e: any) {
+      console.error("❌ Fleet sign-in transaction dropout:", e.message || e);
+      Alert.alert("Connection Delay", "Unable to establish communication with dispatch servers.");
     } finally {
       setLoading(false);
     }

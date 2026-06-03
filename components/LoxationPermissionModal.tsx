@@ -1,4 +1,3 @@
-
 import React from 'react';
 import {
   Modal,
@@ -17,7 +16,7 @@ interface LocationPermissionModalProps {
   subtitle?: string;
   confirmText?: string;
   cancelText?: string;
-  onAllow: () => void;
+  onAllow: () => void | Promise<void>;
   onCancel?: () => void;
 }
 
@@ -25,7 +24,7 @@ export default function LocationPermissionModal({
   visible,
   loading = false,
   title = 'ENABLE LIVE LOCATION',
-  subtitle = 'We use your live location to power real-time delivery tracking, route accuracy, order protection, and faster dispatch synchronization.',
+  subtitle = 'We use your live location to power real-time tracking.',
   confirmText = 'ALLOW LOCATION',
   cancelText = 'NOT NOW',
   onAllow,
@@ -37,94 +36,70 @@ export default function LocationPermissionModal({
       animationType="fade"
       transparent
       statusBarTranslucent
+      onRequestClose={() => {
+        if (!loading) onCancel?.();
+      }}
     >
       <View style={styles.overlay}>
         <View style={styles.card}>
 
-          {/* HEADER ICON */}
+          {/* ICON */}
           <View style={styles.iconWrap}>
-            <Ionicons
-              name="location-sharp"
-              size={30}
-              color="#FFFFFF"
-            />
+            <Ionicons name="location-sharp" size={30} color="#fff" />
           </View>
 
-          {/* TITLES */}
-          <Text style={styles.title}>
-            {title}
-          </Text>
+          {/* TITLE */}
+          <Text style={styles.title}>{title}</Text>
 
-          <Text style={styles.subtitle}>
-            {subtitle}
-          </Text>
+          {/* SUBTITLE */}
+          <Text style={styles.subtitle}>{subtitle}</Text>
 
-          {/* FEATURE ROWS */}
+          {/* FEATURES */}
           <View style={styles.featuresWrap}>
-
             <View style={styles.featureRow}>
-              <Ionicons
-                name="navigate-circle-outline"
-                size={18}
-                color="#000000"
-              />
-              <Text style={styles.featureText}>
-                Real-time order tracking
-              </Text>
+              <Ionicons name="navigate-circle-outline" size={18} color="#000" />
+              <Text style={styles.featureText}>Real-time tracking</Text>
             </View>
 
             <View style={styles.featureRow}>
-              <Ionicons
-                name="shield-checkmark-outline"
-                size={18}
-                color="#000000"
-              />
-              <Text style={styles.featureText}>
-                Secure delivery verification
-              </Text>
+              <Ionicons name="shield-checkmark-outline" size={18} color="#000" />
+              <Text style={styles.featureText}>Secure delivery verification</Text>
             </View>
 
             <View style={styles.featureRow}>
-              <Ionicons
-                name="flash-outline"
-                size={18}
-                color="#000000"
-              />
-              <Text style={styles.featureText}>
-                Faster dispatch routing
-              </Text>
+              <Ionicons name="flash-outline" size={18} color="#000" />
+              <Text style={styles.featureText}>Fast dispatch routing</Text>
             </View>
-
           </View>
 
-          {/* ACTIONS */}
+          {/* CONFIRM */}
           <TouchableOpacity
             style={styles.allowBtn}
-            activeOpacity={0.9}
+            activeOpacity={0.85}
             disabled={loading}
-            onPress={onAllow}
+            onPress={() => {
+              if (loading) return;
+              onAllow?.();
+            }}
           >
             {loading ? (
-              <ActivityIndicator
-                color="#FFFFFF"
-                size="small"
-              />
+              <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.allowBtnText}>
-                {confirmText}
-              </Text>
+              <Text style={styles.allowBtnText}>{confirmText}</Text>
             )}
           </TouchableOpacity>
 
+          {/* CANCEL */}
           <TouchableOpacity
             style={styles.cancelBtn}
             activeOpacity={0.7}
             disabled={loading}
-            onPress={onCancel}
+            onPress={() => {
+              if (loading) return;
+              onCancel?.();
+            }}
           >
-            <Text style={styles.cancelBtnText}>
-              {cancelText}
-            </Text>
+            <Text style={styles.cancelBtnText}>{cancelText}</Text>
           </TouchableOpacity>
 
         </View>
@@ -144,94 +119,86 @@ const styles = StyleSheet.create({
 
   card: {
     width: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 28,
-    paddingHorizontal: 24,
-    paddingTop: 28,
-    paddingBottom: 20,
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 22,
     alignItems: 'center',
   },
 
   iconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#000000',
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#000',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 22,
+    marginBottom: 18,
   },
 
   title: {
     fontSize: 18,
     fontWeight: '900',
-    color: '#000000',
-    letterSpacing: 0.8,
-    marginBottom: 12,
+    color: '#000',
     textAlign: 'center',
+    marginBottom: 10,
   },
 
   subtitle: {
     fontSize: 13,
-    lineHeight: 22,
-    color: '#666666',
+    color: '#666',
     textAlign: 'center',
-    fontWeight: '500',
-    marginBottom: 26,
+    lineHeight: 20,
+    marginBottom: 22,
   },
 
   featuresWrap: {
     width: '100%',
-    gap: 14,
-    marginBottom: 30,
+    gap: 10,
+    marginBottom: 22,
   },
 
   featureRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FAFAFA',
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    gap: 12,
+    padding: 12,
+    borderRadius: 14,
+    gap: 10,
   },
 
   featureText: {
     fontSize: 13,
-    color: '#111111',
     fontWeight: '700',
+    color: '#111',
     flex: 1,
   },
 
   allowBtn: {
     width: '100%',
-    height: 54,
-    borderRadius: 18,
-    backgroundColor: '#000000',
+    height: 52,
+    backgroundColor: '#000',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    borderRadius: 14,
+    marginBottom: 10,
   },
 
   allowBtnText: {
-    color: '#FFFFFF',
+    color: '#fff',
     fontSize: 13,
     fontWeight: '900',
-    letterSpacing: 1,
   },
 
   cancelBtn: {
     width: '100%',
-    height: 50,
+    height: 48,
     justifyContent: 'center',
     alignItems: 'center',
   },
 
   cancelBtnText: {
-    color: '#777777',
     fontSize: 12,
     fontWeight: '800',
-    letterSpacing: 0.6,
+    color: '#777',
   },
 });
-

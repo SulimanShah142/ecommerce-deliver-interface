@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { Ionicons } from '@expo/vector-icons';
 
-const API_URL = "http://192.168.1.3:8787";
+const API_URL = "http://192.168.1.4:8787";
 
 export default function DelivererOrders() {
   const router = useRouter();
@@ -102,7 +102,6 @@ export default function DelivererOrders() {
       default: return { text: '#8E8E93' };
     }
   };
-
   return (
     <View style={styles.container}>
       {/* SEARCH AND EXTENDED FILTER TRUNK HEADER */}
@@ -165,12 +164,24 @@ export default function DelivererOrders() {
           </View>
         )}
 
+        {/* 🎯 COURIER ACTION TAB CONTROL PANEL */}
         <View style={styles.courierTabGroup}>
-          <TouchableOpacity style={[styles.courierTab, activeTab === 'ACTIVE' && styles.courierTabActive]} onPress={() => setActiveTab('ACTIVE')}>
-            <Text style={[styles.courierTabText, activeTab === 'ACTIVE' && styles.courierTabTextActive]}>ACTIVE RUNS</Text>
+          <TouchableOpacity 
+            style={[styles.courierTab, activeTab === 'ACTIVE' && styles.courierTabActive]} 
+            onPress={() => setActiveTab('ACTIVE')}
+          >
+            <Text style={[styles.courierTabText, activeTab === 'ACTIVE' && styles.courierTabTextActive]}>
+              ACTIVE RUNS
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.courierTab, activeTab === 'COMPLETED' && styles.courierTabActive]} onPress={() => setActiveTab('COMPLETED')}>
-            <Text style={[styles.courierTabText, activeTab === 'COMPLETED' && styles.courierTabTextActive]}>HISTORY ARCHIVES</Text>
+          
+          <TouchableOpacity 
+            style={[styles.courierTab, activeTab === 'COMPLETED' && styles.courierTabActive]} 
+            onPress={() => setActiveTab('COMPLETED')}
+          >
+            <Text style={[styles.courierTabText, activeTab === 'COMPLETED' && styles.courierTabTextActive]}>
+              HISTORY ARCHIVES
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -203,6 +214,7 @@ export default function DelivererOrders() {
                     <Text style={styles.addressText} numberOfLines={2}>{item.address?.toUpperCase()}</Text>
                   </View>
                 </TouchableOpacity>
+                
 
                 {(item.status === 'confirmed' || item.status === 'picked_up') && (
                   <View style={styles.actionArea}>
@@ -226,41 +238,86 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F9FA' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' },
   
-  filterSection: { backgroundColor: '#FFFFFF', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F5F5F5', gap: 12 },
-  searchBarRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8F9FA', borderWidth: 1, borderColor: '#EFEFEF', paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 12 : 6, gap: 10 },
+  filterSection: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EFEFEF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  searchBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAFAFA',
+    borderWidth: 1,
+    borderColor: '#ECECEC',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 50,
+    gap: 12,
+    marginBottom: 12,
+  },
   searchInput: { flex: 1, fontSize: 13, color: '#000000', fontWeight: '600', letterSpacing: 0.2 },
   
-  timelineTabGroup: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#FAFAFA', paddingBottom: 4 },
-  timeTab: { backgroundColor: '#F5F5F5', paddingHorizontal: 12, paddingVertical: 8, borderWidth: 0.5, borderColor: '#EAEAEA' },
+  timelineTabGroup: { flexDirection: 'row', paddingBottom: 10 },
+  timeTab: { backgroundColor: '#F5F5F5', paddingHorizontal: 12, paddingVertical: 8, borderWidth: 0.5, borderColor: '#EAEAEA', borderRadius: 4 },
   timeTabActive: { backgroundColor: '#000000', borderColor: '#000000' },
   timeTabText: { fontSize: 8, fontWeight: '900', color: '#666', letterSpacing: 0.5 },
   timeTabTextActive: { color: '#FFFFFF' },
   
-  customDateInputRow: { flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: '#FAFAFA', padding: 10, borderWidth: 0.5, borderColor: '#EFEFEF' },
+  customDateInputRow: { flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: '#FAFAFA', padding: 10, borderWidth: 0.5, borderColor: '#EFEFEF', marginBottom: 12 },
   dateField: { flex: 1, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#EFEFEF', paddingHorizontal: 12, paddingVertical: 8, fontSize: 11, fontWeight: '700', color: '#000' },
   dateSubmitBtn: { backgroundColor: '#000', paddingHorizontal: 15, paddingVertical: 10 },
 
-  courierTabGroup: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#F0F0F0', marginTop: 4 },
-  courierTab: { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  courierTabActive: { borderBottomColor: '#000000' },
-  courierTabText: { fontSize: 10, fontWeight: '800', color: '#999', letterSpacing: 1 },
-  courierTabTextActive: { color: '#000', fontWeight: '900' },
-
-  listContent: { padding: 16, paddingBottom: 100 },
-  taskCard: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#EFEFEF', padding: 20, marginBottom: 15 },
-  cardTop: { gap: 4 },
-  idRow: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 0.5, borderBottomColor: '#F5F5F5', paddingBottom: 10, marginBottom: 10 },
-  orderId: { fontSize: 12, fontWeight: '900', color: '#000', letterSpacing: 0.5, marginRight: 8 },
-  statusPoint: { width: 6, height: 6, borderRadius: 3, marginRight: 6 },
-  statusLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
-  customerName: { fontSize: 14, fontWeight: '800', color: '#222', textTransform: 'uppercase', marginTop: 4 },
-  locationBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 10 },
-  addressText: { fontSize: 12, color: '#555', fontWeight: '500', flex: 1, lineHeight: 16 },
-
-  actionArea: { marginTop: 15, borderTopWidth: 0.5, borderTopColor: '#F5F5F5', paddingTop: 12 },
-  mainActionBtn: { backgroundColor: '#000000', paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 2 },
+  courierTabGroup: {
+    flexDirection: 'row',
+    backgroundColor: '#F0F0F0',
+    borderRadius: 14,
+    padding: 6,
+    marginTop: 8,
+  },
+  courierTab: {
+    flex: 1,
+    height: 42,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+  },
+  courierTabActive: {
+    backgroundColor: '#111111',
+  },
+  courierTabText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#666666',
+    letterSpacing: 0.5,
+  },
+  courierTabTextActive: {
+    color: '#FFFFFF',
+  },
+  
+  // Appended placeholders to clean up any structural missing tags
+  listContent: { padding: 16 },
+  taskCard: { backgroundColor: '#FFF', padding: 16, marginBottom: 12, borderRadius: 12 },
+  cardTop: { gap: 6 },
+  idRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  orderId: { fontSize: 12, fontWeight: '700' },
+  statusPoint: { width: 8, height: 8, borderRadius: 4 },
+  statusLabel: { fontSize: 11, fontWeight: '700' },
+  customerName: { fontSize: 14, fontWeight: '600' },
+  locationBox: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  addressText: { fontSize: 12, color: '#555' },
+  actionArea: { marginTop: 12 },
+  mainActionBtn: { backgroundColor: '#000', flexDirection: 'row', padding: 12, justifyContent: 'center', alignItems: 'center', borderRadius: 8 },
   arrivedBtn: { backgroundColor: '#22C55E' },
-  mainActionText: { color: '#FFF', fontSize: 10, fontWeight: '900', letterSpacing: 1 },
-  empty: { alignItems: 'center', marginTop: 120, gap: 12 },
-  emptyText: { fontSize: 10, fontWeight: '900', color: '#BBB', letterSpacing: 1, textAlign: 'center' }
+  mainActionText: { color: '#FFF', fontWeight: '700' },
+  empty: { alignItems: 'center', padding: 40 },
+  emptyText: { color: '#999', fontSize: 12, textAlign: 'center', marginTop: 12 }
 });
