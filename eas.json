@@ -9,23 +9,20 @@
       "distribution": "internal",
       "channel": "development"
     },
-    "preview": {
-      "distribution": "internal",
-      "channel": "preview",
-      "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assemblePreview -Pandroid.ndk.abiFilters=armeabi-v7a,arm64-v8a"
-      }
-    },
-    "production": {
-      "autoIncrement": true,
-      "channel": "production",
-      "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease -Pandroid.ndk.abiFilters=armeabi-v7a,arm64-v8a"
-      }
-    }
-  },
+"preview": {
+  "distribution": "internal",
+  "channel": "preview",
+  "android": {
+    "buildType": "apk"
+  }
+},
+"production": {
+  "autoIncrement": true,
+  "channel": "production",
+  "android": {
+    "buildType": "apk"
+  }
+}  },
   "submit": {
     "production": {}
   }

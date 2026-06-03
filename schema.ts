@@ -1,7 +1,7 @@
 import { 
   pgTable, text, timestamp, boolean, uuid, pgEnum, 
   integer, numeric, decimal, index ,uniqueIndex,
-   foreignKey, real
+   foreignKey, real, varchar
 } from "drizzle-orm/pg-core";
 // 1. Roles Enum (Marketplace wide)
 export const roleEnum = pgEnum('user_role', ['admin', 'seller', 'deliverer', 'customer']);
@@ -270,6 +270,21 @@ export const appSettings = pgTable('app_settings', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
+
+export const promoCodes = pgTable("promo_codes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  
+  // Enforces unique codes upper-cased constraints inside database blocks
+  code: varchar("code", { length: 50 }).notNull().unique(),
+  
+  // Stores numeric weights or absolute fixed discount values maps
+  value: text("value").notNull().default("0"),
+  
+  // 'percentage' or 'fixed'
+  type: text("type").notNull().default("percentage"),
+  
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
+});
 // 1. Chat Conversations
 // This table persists longer so users can see their active tickets
 export const conversations = pgTable("conversations", {
