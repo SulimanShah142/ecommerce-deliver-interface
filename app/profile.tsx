@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { OneSignal } from 'react-native-onesignal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const BASE_URL = "http://192.168.1.4:8787";
+const BASE_URL = "https://brand-gallery-backend.brand-gallery.workers.dev";
 
 export default function DelivererProfile() {
   const router = useRouter();

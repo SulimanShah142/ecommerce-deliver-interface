@@ -10,7 +10,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { OneSignal } from 'react-native-onesignal';
 import { useBadges, BadgeProvider } from '@/Contexts/BadgeContext';
 
-const BASE_URL = "http://192.168.1.4:8787";
+const BASE_URL = "https://brand-gallery-backend.brand-gallery.workers.dev";
 const COURIER_APP_ID = "32271ebd-e2b6-4562-b765-dd50eb88b966"; // Your precise Fleet App ID
 
 function DriverLayoutContent() {
@@ -28,6 +28,7 @@ function DriverLayoutContent() {
   const locale = "en";
 
   // 🎯 HIGH-UTILITY MODULAR ONESIGNAL DRIVER IDENTITY MAPPER
+   // 🎯 HIGH-UTILITY MODULAR ONESIGNAL DRIVER IDENTITY MAPPER
   const bindOneSignalDriverToken = async (driverId: string) => {
     try {
       const cleanDriverUuid = String(driverId).trim();
@@ -35,10 +36,12 @@ function DriverLayoutContent() {
 
       console.log(`📡 [ONESIGNAL FLEET] Binding hardware push tokens to Driver Alias: ${cleanDriverUuid}`);
       
-      // Forces native token registration pass asynchronously
+      // 1. Authenticate the primary External User ID
       OneSignal.login(cleanDriverUuid);
       
-      // Set explicit tagging matrices to allow targeted group dispatch sends (e.g. active drivers pool)
+      // 2. 🎯 THE CRITICAL BACKEND MATRIX SYNC FIX:
+      // Map the alias for consistent backend targeting.
+      OneSignal.User.addAlias("deliverer_id", cleanDriverUuid);
       OneSignal.User.addTag("role", "DELIVERER");
       OneSignal.User.addTag("driver_id", cleanDriverUuid);
       
@@ -47,6 +50,7 @@ function DriverLayoutContent() {
       console.warn("⚠️ OneSignal device identity binding deferred:", err.message || err);
     }
   };
+
 
   // 🎯 UNIFIED PARALLEL SECURED FLEET INITIALIZATION ENGINE
   useEffect(() => {

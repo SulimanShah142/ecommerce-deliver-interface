@@ -19,7 +19,7 @@ import * as Location from "expo-location";
 import LocationPermissionModal from "@/components/LoxationPermissionModal";
 
 // 🎯 HIGH-SPEED PRODUCTION BINDINGS
-const BASE_URL = "http://192.168.1.4:8787";
+const BASE_URL = "https://brand-gallery-backend.brand-gallery.workers.dev";
 const LOCATION_IQ_TOKEN = "pk.ac03476010699238dcadcb4f0eb9a998";
 
 export default function DelivererOrderDetail() {
@@ -512,19 +512,6 @@ const permissionFlowStarted = useRef(false);
             >
               <Ionicons name="checkmark-circle-sharp" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
               <Text style={styles.primaryActionBtnText}>CONFIRM SECURE DELIVERY</Text>
-           
-       
-
-              <Ionicons
-                name="checkmark-circle-sharp"
-                size={18}
-                color="#FFFFFF"
-                style={{ marginRight: 8 }}
-              />
-
-              <Text style={styles.primaryActionBtnText}>
-                CONFIRM SECURE DELIVERY
-              </Text>
             </TouchableOpacity>
           )}
          <LocationPermissionModal
