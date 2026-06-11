@@ -39,7 +39,6 @@
           "resizeMode": "cover",
           "backgroundColor": "#ffffff",
           "dark": {
-            "image": "./assets/images/app-icon.jpeg",
             "backgroundColor": "#000000"
           }
         }
@@ -55,6 +54,9 @@
       "@react-native-community/datetimepicker"
     ],
     "updates": {
+         "enabled": true,
+     
+      "fallbackToCacheTimeout": 0,
       "url": "https://u.expo.dev/db58dc3e-bb7b-4304-921f-cf2a65110f7c"
     },
     "runtimeVersion": {
